@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>YOLO 하이라이트 분석기</title>
+    <style>
+    body { background:#111; color:white; font-family:sans-serif; text-align:center; margin-top:40px; }
+    select,button { padding:10px; margin:10px; border-radius:6px; }
+    progress { width:80%; height:30px; margin-top:10px; }
+    #status { margin-top:10px; font-size:18px; }
+    </style>
+</head>
+<body>
+    <h2>🏀 YOLO 하이라이트 분석기</h2>
+
+    <select id="video" name="video" multiple size="6">
+        {% for v in videos %}
+        <option value="{{v}}">{{v}}</option>
+        {% endfor %}
+    </select><br>
+
+    <button onclick="selectBasket()">골대 좌표 선택</button>
+    <button onclick="start()">분석 시작</button>
+    <button id="stopBtn" onclick="stopProcess()" disabled>중지</button>
+    <button onclick="goCrossEdit()">좌/우 골대 교차 편집</button>
+
+    <div id="status">대기 중...</div>
+    <progress id="bar" value="0" max="100"></progress>
+
+    <h3 style="margin-top:40px;">📁 저장된 분석</h3>
+    <div id="savedList"></div>
+
+    <script>
+
+    fetch("/saved")
+    .then(r => r.json())
+    .then(list => {
+        const box = document.getElementById("savedList");
+        box.innerHTML = "";
+
+        list.forEach(item => {
+        const div = document.createElement("div");
+        div.style.margin = "6px";
+
+        const cleanName = item.video.replace(/\.[^/.]+$/, "");  // 확장자 제거
+
+        div.innerHTML = `
+            <a href="/result_page?video=${encodeURIComponent(item.video)}&clips=${encodeURIComponent(JSON.stringify(item.clips || []))}"
+            style="color:#0ff; text-decoration:none;">
+            <b>${cleanName}</b>
+            </a>
+            (${item.created})
+            <button onclick="delSaved('${item.id}')">삭제</button>
+        `;
+
+        box.appendChild(div);
+        });
+    });
+
+    function delSaved(id) {
+    fetch("/saved/" + id, { method: "DELETE" })
+        .then(() => location.reload());
+    }
+
+    let polling = false;
+
+    async function selectBasket() {
+        const video = document.getElementById('video').value;
+        if (!video) {
+            alert("영상을 선택하세요!");
+            return;
+        }
+        window.location.href = '/select_basket?video=' + encodeURIComponent(video);
+    }
+
+    async function start() {
+        const sel = document.getElementById("video");
+        const selected = [...sel.options].filter(o => o.selected).map(o => o.value);
+
+        if (selected.length === 0) {
+            alert("영상을 1개 이상 선택하세요!");
+            return;
+        }
+
+        // 좌표 없는 영상 체크
+        let missing = [];
+        let needReset = [];
+
+        for (const v of selected) {
+            const coords = await fetch('/basket_coords?video=' + encodeURIComponent(v))
+                                .then(r => r.json())
+                                .catch(() => null);
+
+            // 없으면 missing 리스트에
+            if (!coords || !coords.x1) {
+                missing.push(v);
+                continue;
+            }
+
+            // 기존 좌표 있음 → 재설정할지 물어보기
+            const reset = confirm(`${v} 영상은 기존 골대 좌표가 존재합니다.\n재설정하시겠습니까?`);
+            if (reset) needReset.push(v);
+        }
+
+        // 1) 좌표 재설정할 영상 먼저 처리
+        if (needReset.length > 0) {
+            const v = needReset[0];
+            window.location.href = "/select_basket?video=" + encodeURIComponent(v) +
+                                "&next=" + encodeURIComponent(JSON.stringify(needReset.slice(1).concat(missing)));
+            return;
+        }
+
+        // 2) 좌표 없는 영상 처리
+        if (missing.length > 0) {
+
+            if (missing.length === 1) {
+                const ok = confirm(`다음 영상의 골대 좌표가 없습니다:\n${missing[0]}\n설정하시겠습니까?`);
+                if (!ok) return;
+
+                window.location.href = "/select_basket?video=" + encodeURIComponent(missing[0]);
+                return;
+            }
+
+            // 2개 이상 → 순차 설정
+            const first = missing[0];
+            const queue = missing.slice(1);
+            alert(`다음 영상들에 골대 좌표가 없습니다.\n순서대로 설정을 진행합니다.\n1: ${first}`);
+
+            window.location.href = "/select_basket?video=" + encodeURIComponent(first) +
+                                "&next=" + encodeURIComponent(JSON.stringify(queue));
+            return;
+        }
+
+        // 3) 모든 영상 골대 준비 완료 → YOLO 분석 시작
+        for (const v of selected) {
+            await fetch('/process_yolo?video=' + encodeURIComponent(v));
+        }
+
+        alert("분석을 시작합니다.");
+        if (!polling) poll();
+    }
+
+
+    async function stopProcess() {
+        document.getElementById('status').innerText = '중지 요청 중...';
+        document.getElementById('stopBtn').disabled = true;
+        try {
+            await fetch('/stop', { method: 'POST' });
+        } catch (e) {}
+    }
+
+    function goCrossEdit() {
+        window.location.href = "/full";
+    }
+
+    /* 👇 수정된 핵심 poll 함수 */
+    async function poll() {
+        polling = true;
+        const res = await fetch('/progress?ts=' + Date.now(), { cache: 'no-store' });
+        const data = await res.json();
+
+        document.getElementById('bar').value = data.progress || 0;
+        document.getElementById('status').innerText =
+            '상태: ' + data.status + ' (' + (data.progress || 0) + '%)';
+
+        if (data.status === 'done') {
+            document.getElementById('stopBtn').disabled = true;
+
+            const clipsEncoded = encodeURIComponent(JSON.stringify(data.clips || []));
+
+            window.location.href =
+                '/result_page?video=' + encodeURIComponent(data.video) +
+                '&clips=' + clipsEncoded;
+
+            polling = false;
+            return;
+        }
+
+        if (data.status === 'stopped') {
+            document.getElementById('stopBtn').disabled = true;
+            polling = false;
+            return;
+        }
+
+        if (data.status && data.status.startsWith('error')) {
+            document.getElementById('stopBtn').disabled = true;
+            polling = false;
+            return;
+        }
+
+        setTimeout(poll, 1000);
+    }
+
+    window.addEventListener('beforeunload', function () {
+        navigator.sendBeacon('/stop');
+    });
+    </script>
+</body>
+</html>

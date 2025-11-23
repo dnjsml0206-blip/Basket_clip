@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>교차 편집</title>
+
+    <style>
+        body {
+            background: #121212;
+            color: #fff;
+            font-family: sans-serif;
+            padding: 20px;
+        }
+
+        h2 { margin-top: 0; }
+
+        /* --------- 메인 프리뷰 영역 --------- */
+        #previewCanvas {
+            width: 100%;
+            max-height: 420px;
+            background: #000;
+            border-radius: 8px;
+        }
+
+        .control-bar {
+            margin-top: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #playPauseBtn {
+            padding: 6px 14px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            background: #0af;
+            color: #000;
+            font-size: 14px;
+        }
+
+        #timeLabel {
+            font-size: 13px;
+            color: #ccc;
+            min-width: 90px;
+        }
+
+        #seekSlider {
+            flex: 1;
+        }
+
+        /* --------- 타임라인 UI --------- */
+        .timeline-box {
+            margin-top: 20px;
+        }
+
+        .timeline-label {
+            font-size: 13px;
+            margin-bottom: 4px;
+            color: #ccc;
+        }
+
+        #timelineWrapper {
+            width: 100%;
+            overflow-x: auto;
+            overflow-y: hidden;
+            padding-bottom: 10px;
+        }
+
+        .timeline {
+            width: 3000px;   /* 스크롤 생기도록 가로로 길게 */
+            height: 20px;
+            background: #666;
+            margin-top: 10px;
+            position: relative;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .selection-box {
+            position: absolute;
+            top: 0;
+            height: 100%;
+            background: rgba(0,150,255,0.25);
+            border: 1px solid #09f;
+            pointer-events: none;
+        }
+
+        .segment {
+            position: absolute;
+            top: 0;
+            height: 100%;
+            background: rgba(0, 200, 255, 0.4);
+            border: 1px solid #00e1ff;
+            cursor: move;
+            box-sizing: border-box;
+        }
+
+        .segment.selected {
+            background: rgba(255, 220, 0, 0.55);
+            border: 2px solid yellow;
+        }
+
+        .handle {
+            position: absolute;
+            top: 0;
+            width: 6px;
+            height: 100%;
+            background: rgba(255,255,255,0.8);
+            cursor: ew-resize;
+        }
+
+        .handle.left  { left: 0; }
+        .handle.right { right: 0; }
+
+        /* --------- Ruler --------- */
+        .ruler {
+            margin-top: 8px;
+            height: 20px;
+            position: relative;
+            font-size: 10px;
+            color: #aaa;
+        }
+
+        .tick {
+            position: absolute;
+            top: 0;
+            height: 8px;
+            width: 1px;
+            background: #aaa;
+        }
+
+        .tick-label {
+            position: absolute;
+            top: 10px;
+            font-size: 10px;
+            transform: translateX(-50%);
+        }
+
+        /* --------- 버튼 --------- */
+        .btn-box {
+            margin-top: 20px;
+        }
+
+        button {
+            padding: 8px 14px;
+            margin-right: 8px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .play-btn   { background: #0af;   color: #000; }
+        .export-btn { background:#0f0;   color:#000; }
+        .del-btn    { background: #ff4444; color: #000; }
+
+        .hint {
+            margin-top:10px;
+            font-size:12px;
+            color:#aaa;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+
+<body>
+
+<h2>🎬 좌/우 골대 교차 편집</h2>
+
+<!-- 실제 재생 소스 (숨김, 오디오는 left 만 사용) -->
+<video id="leftVideo"  src="/full_file?p={{ left_src }}"></video>
+<video id="rightVideo" src="/full_file?p={{ right_src }}" muted></video>
+
+<!-- 두 영상을 겹쳐서 보여줄 Canvas -->
+<canvas id="previewCanvas" width="1280" height="720"></canvas>
+
+<!-- 커스텀 재생/일시정지 + Seek 바 -->
+<div class="control-bar">
+    <button id="playPauseBtn" class="play-btn">▶ 재생</button>
+    <span id="timeLabel">00:00 / 00:00</span>
+    <input type="range" id="seekSlider" min="0" max="1000" value="0">
+</div>
+
+<!-- 타임라인 (좌/우) -->
+<div id="timelineWrapper">
+    <div class="timeline-box">
+        <div class="timeline-label">좌측 카메라</div>
+        <div id="timelineLeft" class="timeline"></div>
+    </div>
+
+    <div class="timeline-box">
+        <div class="timeline-label">우측 카메라</div>
+        <div id="timelineRight" class="timeline"></div>
+    </div>
+</div>
+
+<!-- 공통 ruler -->
+<div id="ruler" class="ruler"></div>
+
+<div class="btn-box">
+    <button id="addSegmentBtn">구간 추가</button>
+    <button class="del-btn" onclick="deleteSegment()">선택 구간 삭제</button>
+    <button onclick="saveEdit()">작업 저장</button>
+    <button onclick="loadEdit()">작업 불러오기</button>
+    <button class="export-btn" onclick="exportVideo()">영상 추출</button>
+</div>
+
+<div class="hint">
+    • 상단 영상은 좌/우 영상을 겹쳐서 보여줍니다. 재생 시, <b>segment 설정에 따라 카메라가 자동 전환</b>됩니다.<br>
+    • 타임라인 빈 곳 클릭 → 해당 카메라/시간으로 시점 이동 (pause 상태).<br>
+    • 구간(색 막대) 클릭 → 선택 / Shift+클릭 → 다중 선택, Delete 키 또는 "선택 구간 삭제"로 제거.<br>
+    • 구간 더블클릭 → 해당 구간 시작 지점에서 재생.<br>
+    • 구간은 드래그로 이동, 양 끝 흰 막대로 길이 조절. 좌/우 타임라인 간에는 시간이 서로 겹치지 않도록 막습니다.
+</div>
+
+<script>
+/* ======================= 템플릿 데이터 ======================= */
+const sessionId      = "{{ session_id }}";
+const duration       = Number({{ duration }});   // 전체 길이(초)
+const leftSrcPath    = "{{ left_src }}";
+const rightSrcPath   = "{{ right_src }}";
+const leftVideoName  = "{{ left_video }}";
+const rightVideoName = "{{ right_video }}";
+const offset         = Number({{ offset }});     // 🔴 싱크 오프셋 (초, right 기준)
+
+/* 세그먼트 데이터 */
+let leftClips  = {{ left_clips  | tojson }};
+let rightClips = {{ right_clips | tojson }};
+
+let segments = [];
+leftClips.forEach(c  => segments.push({ start: c.start, end: c.end, side: "left"  }));
+rightClips.forEach(c => segments.push({ start: c.start, end: c.end, side: "right" }));
+
+let selected = null;
+let selectedSegments = new Set();
+let lastClickedSide = "left";
+let previewOverrideSide = null;
+
+/* 재생 관련 */
+const leftVideo  = document.getElementById("leftVideo");
+const rightVideo = document.getElementById("rightVideo");
+const canvas     = document.getElementById("previewCanvas");
+const ctx        = canvas.getContext("2d");
+
+const tlLeft  = document.getElementById("timelineLeft");
+const tlRight = document.getElementById("timelineRight");
+const playBtn = document.getElementById("playPauseBtn");
+const seek    = document.getElementById("seekSlider");
+const timeLbl = document.getElementById("timeLabel");
+
+let currentTime = 0;
+let playing     = false;
+
+
+/* ======================= 1) RULER ======================= */
+function buildRuler() {
+    const r = document.getElementById("ruler");
+    r.innerHTML = "";
+
+    const step = duration <= 60 ? 5 : 10;
+    for (let t = 0; t <= duration; t += step) {
+        const x = (t / duration) * 100;
+
+        const tick = document.createElement("div");
+        tick.className = "tick";
+        tick.style.left = x + "%";
+        r.appendChild(tick);
+
+        const label = document.createElement("div");
+        label.className = "tick-label";
+        label.style.left = x + "%";
+        label.innerText = `${t}s`;
+        r.appendChild(label);
+    }
+}
+
+
+/* ======================= 2) 카메라 선택 로직 ======================= */
+function getCameraForTime(t) {
+    // 재생 중이 아니고, 프리뷰 오버라이드가 있으면 우선
+    if (!playing && previewOverrideSide) {
+        return previewOverrideSide;
+    }
+
+    // segments 에서 해당 시간에 포함되는 마지막 segment 의 side 사용
+    let cam = "left";
+    for (const seg of segments) {
+        if (t >= seg.start && t < seg.end) {
+            cam = seg.side;
+        }
+    }
+    return cam;
+}
+
+
+/* ======================= 3) 오버랩 체크 (좌/우 간만) ======================= */
+function hasOverlap(start, end, side) {
+    return segments.some(seg => {
+        if (seg.side === side) return false;
+        // 다른 side 와 시간 겹침?
+        return !(seg.end <= start || seg.start >= end);
+    });
+}
+
+
+/* ======================= 4) 타임라인 렌더 ======================= */
+function renderTimeline() {
+    tlLeft.innerHTML  = "";
+    tlRight.innerHTML = "";
+
+    const pxLeft  = tlLeft.clientWidth  || 1;
+    const pxRight = tlRight.clientWidth || 1;
+
+    segments.forEach((seg, idx) => {
+        const tl      = (seg.side === "left") ? tlLeft : tlRight;
+        const tlWidth = (seg.side === "left") ? pxLeft : pxRight;
+
+        const box = document.createElement("div");
+        box.className = "segment";
+        if (selected === idx || selectedSegments.has(idx)) {
+            box.classList.add("selected");
+        }
+
+        const left = (seg.start / duration) * 100;
+        const width = ((seg.end - seg.start) / duration) * 100;
+        box.style.left  = left + "%";
+        box.style.width = width + "%";
+
+        // 단일 클릭 → 선택 + 시점 이동 (pause)
+        box.addEventListener("click", (e) => {
+            e.stopPropagation();
+            lastClickedSide = seg.side;
+
+            if (e.shiftKey) {
+                if (selectedSegments.has(idx)) selectedSegments.delete(idx);
+                else selectedSegments.add(idx);
+            } else {
+                selected = idx;
+                selectedSegments.clear();
+                selectedSegments.add(idx);
+            }
+
+            currentTime = seg.start;
+            previewOverrideSide = seg.side;
+            syncVideosToCurrentTime();
+            playing = false;
+            updatePlayButton();
+            updateSeekUI();
+            renderTimeline();
+        });
+
+        // 더블 클릭 → 해당 구간 시작에서 재생
+        box.ondblclick = (e) => {
+            e.stopPropagation();
+            currentTime = seg.start;
+            previewOverrideSide = null; // 재생 시에는 segments 기준
+            syncVideosToCurrentTime();
+            playing = true;
+            playVideos();
+            updatePlayButton();
+        };
+
+        // ---- 드래그로 전체 이동 ----
+        box.onmousedown = (e) => {
+            if (e.target.classList.contains("handle")) return;
+
+            e.preventDefault();
+            const startX    = e.clientX;
+            const initStart = seg.start;
+            const initEnd   = seg.end;
+
+            const move = (e2) => {
+                const dx = e2.clientX - startX;
+                const px = tlWidth;
+                const dt = (dx / px) * duration;
+
+                let newStart = initStart + dt;
+                let newEnd   = initEnd + dt;
+
+                if (newStart < 0) {
+                    newEnd -= newStart;
+                    newStart = 0;
+                }
+                if (newEnd > duration) {
+                    const diff = newEnd - duration;
+                    newStart -= diff;
+                    newEnd   = duration;
+                }
+
+                if (hasOverlap(newStart, newEnd, seg.side)) return;
+
+                seg.start = newStart;
+                seg.end   = newEnd;
+
+                currentTime = seg.start;
+                previewOverrideSide = seg.side;
+                syncVideosToCurrentTime();
+                updateSeekUI();
+
+                renderTimeline();
+            };
+
+            const up = () => {
+                document.removeEventListener("mousemove", move);
+                document.removeEventListener("mouseup", up);
+            };
+
+            document.addEventListener("mousemove", move);
+            document.addEventListener("mouseup", up);
+        };
+
+        // ---- 양 끝 핸들: 길이조절 ----
+        const hLeft = document.createElement("div");
+        hLeft.className = "handle left";
+        hLeft.onmousedown = (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            const startX    = e.clientX;
+            const initStart = seg.start;
+
+            const move = (e2) => {
+                const dx = e2.clientX - startX;
+                const px = tlWidth;
+                const dt = (dx / px) * duration;
+
+                let newStart = initStart + dt;
+                if (newStart < 0) newStart = 0;
+                if (newStart > seg.end - 0.5) newStart = seg.end - 0.5;
+
+                if (hasOverlap(newStart, seg.end, seg.side)) return;
+
+                seg.start = newStart;
+
+                currentTime = seg.start;
+                previewOverrideSide = seg.side;
+                syncVideosToCurrentTime();
+                updateSeekUI();
+
+                renderTimeline();
+            };
+
+            const up = () => {
+                document.removeEventListener("mousemove", move);
+                document.removeEventListener("mouseup", up);
+            };
+            document.addEventListener("mousemove", move);
+            document.addEventListener("mouseup", up);
+        };
+
+        const hRight = document.createElement("div");
+        hRight.className = "handle right";
+        hRight.onmousedown = (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            const startX  = e.clientX;
+            const initEnd = seg.end;
+
+            const move = (e2) => {
+                const dx = e2.clientX - startX;
+                const px = tlWidth;
+                const dt = (dx / px) * duration;
+
+                let newEnd = initEnd + dt;
+                if (newEnd > duration) newEnd = duration;
+                if (newEnd < seg.start + 0.5) newEnd = seg.start + 0.5;
+
+                if (hasOverlap(seg.start, newEnd, seg.side)) return;
+
+                seg.end = newEnd;
+
+                currentTime = seg.start;
+                previewOverrideSide = seg.side;
+                syncVideosToCurrentTime();
+                updateSeekUI();
+
+                renderTimeline();
+            };
+
+            const up = () => {
+                document.removeEventListener("mousemove", move);
+                document.removeEventListener("mouseup", up);
+            };
+            document.addEventListener("mousemove", move);
+            document.addEventListener("mouseup", up);
+        };
+
+        box.appendChild(hLeft);
+        box.appendChild(hRight);
+        tl.appendChild(box);
+    });
+}
+
+
+/* ======================= 5) 드래그 선택 박스 (다중 선택) ======================= */
+let isDraggingSelection = false;
+let dragStartX = 0;
+let selectionDiv = null;
+
+function attachSelectionDrag(timeline) {
+    timeline.addEventListener("mousedown", (e) => {
+        if (e.target.classList.contains("segment") || e.target.classList.contains("handle")) return;
+
+        isDraggingSelection = true;
+        const rect = timeline.getBoundingClientRect();
+        dragStartX = e.clientX;
+
+        if (selectionDiv) {
+            selectionDiv.remove();
+            selectionDiv = null;
+        }
+
+        selectionDiv = document.createElement("div");
+        selectionDiv.className = "selection-box";
+        selectionDiv.style.left = (e.clientX - rect.left) + "px";
+        selectionDiv.style.width = "0px";
+        timeline.appendChild(selectionDiv);
+    });
+
+    document.addEventListener("mousemove", (e) => {
+        if (!isDraggingSelection || !selectionDiv) return;
+
+        const rect = timeline.getBoundingClientRect();
+        const x1   = dragStartX - rect.left;
+        const x2   = e.clientX - rect.left;
+
+        const left = Math.min(x1, x2);
+        const width = Math.abs(x2 - x1);
+
+        selectionDiv.style.left  = left + "px";
+        selectionDiv.style.width = width + "px";
+    });
+
+    document.addEventListener("mouseup", (e) => {
+        if (!isDraggingSelection || !selectionDiv) return;
+        isDraggingSelection = false;
+
+        const rect = timeline.getBoundingClientRect();
+        const x1   = dragStartX - rect.left;
+        const x2   = e.clientX   - rect.left;
+
+        const pxStart = Math.min(x1, x2);
+        const pxEnd   = Math.max(x1, x2);
+
+        const tStart = (pxStart / rect.width) * duration;
+        const tEnd   = (pxEnd   / rect.width) * duration;
+
+        selectionDiv.remove();
+        selectionDiv = null;
+
+        selectedSegments.clear();
+        segments.forEach((seg, idx) => {
+            const overlap = !(seg.end < tStart || seg.start > tEnd);
+            if (overlap) {
+                selectedSegments.add(idx);
+            }
+        });
+
+        renderTimeline();
+    });
+}
+
+
+/* ======================= 6) 빈 공간 클릭 → 시점 이동 (pause) ======================= */
+function attachTimelineClick() {
+    tlLeft.addEventListener("click", (e) => {
+        if (e.target.classList.contains("segment") || e.target.classList.contains("handle")) return;
+
+        const rect  = tlLeft.getBoundingClientRect();
+        const ratio = (e.clientX - rect.left) / rect.width;
+        let t = ratio * duration;
+        t = Math.max(0, Math.min(duration, t));
+
+        lastClickedSide = "left";
+        previewOverrideSide = "left";
+
+        selected = null;
+        selectedSegments.clear();
+        renderTimeline();
+
+        currentTime = t;
+        syncVideosToCurrentTime();
+        playing = false;
+        updatePlayButton();
+        updateSeekUI();
+    });
+
+    tlRight.addEventListener("click", (e) => {
+        if (e.target.classList.contains("segment") || e.target.classList.contains("handle")) return;
+
+        const rect  = tlRight.getBoundingClientRect();
+        const ratio = (e.clientX - rect.left) / rect.width;
+        let t = ratio * duration;
+        t = Math.max(0, Math.min(duration, t));
+
+        lastClickedSide = "right";
+        previewOverrideSide = "right";
+
+        selected = null;
+        selectedSegments.clear();
+        renderTimeline();
+
+        currentTime = t;
+        syncVideosToCurrentTime();
+        playing = false;
+        updatePlayButton();
+        updateSeekUI();
+    });
+}
+
+
+/* ======================= 7) 구간 추가 / 삭제 ======================= */
+function addSegment() {
+    let t = currentTime;
+
+    let start = t;
+    let end   = t + 2.0;
+
+    if (end > duration) {
+        end   = duration;
+        start = Math.max(0, end - 2.0);
+    }
+
+    const side = lastClickedSide || "left";
+
+    if (hasOverlap(start, end, side)) {
+        alert("다른 카메라 구간과 시간이 겹쳐서 추가할 수 없습니다.");
+        return;
+    }
+
+    segments.push({ start, end, side });
+    selected = segments.length - 1;
+    selectedSegments.clear();
+    selectedSegments.add(selected);
+
+    renderTimeline();
+}
+
+function deleteSegment() {
+    if (selectedSegments.size > 0) {
+        segments = segments.filter((seg, idx) => !selectedSegments.has(idx));
+        selectedSegments.clear();
+        selected = null;
+        renderTimeline();
+    } else if (selected != null) {
+        segments.splice(selected, 1);
+        selected = null;
+        renderTimeline();
+    } else {
+        alert("삭제할 구간이 선택되어 있지 않습니다.");
+    }
+}
+
+
+/* ======================= 8) 재생/타임라인 UI ======================= */
+function formatTime(sec) {
+    if (!isFinite(sec)) sec = 0;
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return String(m).padStart(2,"0") + ":" + String(s).padStart(2,"0");
+}
+
+function updateSeekUI() {
+    if (!duration || !isFinite(duration) || duration <= 0) {
+        seek.value = 0;
+        timeLbl.textContent = "00:00 / 00:00";
+        return;
+    }
+
+    const ratio = currentTime / duration;
+    seek.value = Math.max(0, Math.min(1000, Math.floor(ratio * 1000)));
+    timeLbl.textContent = `${formatTime(currentTime)} / ${formatTime(duration)}`;
+}
+
+function updatePlayButton() {
+    playBtn.textContent = playing ? "⏸ 일시정지" : "▶ 재생";
+}
+
+/* 🔴 오프셋을 반영해서 오른쪽 영상 싱크 맞추기 */
+function syncVideosToCurrentTime() {
+    leftVideo.currentTime = currentTime;
+    let rt = currentTime - offset;
+    if (rt < 0) rt = 0;
+    if (rightVideo.duration && rt > rightVideo.duration) rt = rightVideo.duration;
+    rightVideo.currentTime = rt;
+}
+
+function playVideos() {
+    leftVideo.play().catch(()=>{});
+    rightVideo.play().catch(()=>{});
+}
+
+function pauseVideos() {
+    leftVideo.pause();
+    rightVideo.pause();
+}
+
+function togglePlay() {
+    if (!duration || duration <= 0) return;
+
+    if (playing) {
+        playing = false;
+        pauseVideos();
+    } else {
+        playing = true;
+        previewOverrideSide = null; // 재생 중에는 segments 기준
+        syncVideosToCurrentTime();
+        playVideos();
+    }
+    updatePlayButton();
+}
+
+/* Seek 바 드래그 */
+seek.addEventListener("input", (e) => {
+    const val   = Number(e.target.value);
+    const ratio = val / 1000;
+    currentTime = duration * ratio;
+    syncVideosToCurrentTime();
+    updateSeekUI();
+});
+
+seek.addEventListener("change", () => {
+    if (!playing) {
+        pauseVideos();
+    }
+});
+
+
+/* ======================= 9) Canvas 렌더 루프 ======================= */
+function drawFrame(cam) {
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    try {
+        // 기본은 left 전체 그리기
+        ctx.drawImage(leftVideo, 0, 0, w, h);
+    } catch(e) {}
+
+    if (cam === "right") {
+        try {
+            ctx.drawImage(rightVideo, 0, 0, w, h);
+        } catch(e) {}
+    }
+}
+
+function startRenderLoop() {
+    function loop() {
+        if (playing) {
+            currentTime = leftVideo.currentTime;
+
+            if (currentTime >= duration) {
+                currentTime = duration;
+                playing = false;
+                pauseVideos();
+                updatePlayButton();
+            } else {
+                // 🔴 재생 중에도 offset 반영해서 right 싱크 유지
+                let rtime = currentTime - offset;
+                if (rtime < 0) rtime = 0;
+                if (rightVideo.duration && rtime > rightVideo.duration) {
+                    rtime = rightVideo.duration;
+                }
+                rightVideo.currentTime = rtime;
+            }
+        }
+
+        const cam = getCameraForTime(currentTime);
+        drawFrame(cam);
+        updateSeekUI();
+
+        requestAnimationFrame(loop);
+    }
+    loop();
+}
+
+
+/* ======================= 10) 작업 저장 / 불러오기 / 추출 ======================= */
+async function saveEdit() {
+    if (!segments.length) {
+        if (!confirm("저장할 구간이 없습니다. 그래도 저장하시겠습니까?")) return;
+    }
+
+    const payload = {
+        left_video:  leftVideoName,
+        right_video: rightVideoName,
+        segments:    segments
+    };
+
+    const res  = await fetch("/full_save_edit", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+
+    if (data.ok) {
+        alert("작업이 저장되었습니다.");
+    } else {
+        alert("작업 저장 실패: " + (data.error || "알 수 없는 오류"));
+    }
+}
+
+async function loadEdit() {
+    const url = `/full_load_edit?left=${encodeURIComponent(leftVideoName)}&right=${encodeURIComponent(rightVideoName)}`;
+    const res  = await fetch(url);
+    const data = await res.json();
+
+    if (!data.ok) {
+        alert("작업 불러오기 실패: " + (data.error || "알 수 없는 오류"));
+        return;
+    }
+
+    if (!data.segments || !data.segments.length) {
+        alert("저장된 작업이 없습니다.");
+        return;
+    }
+
+    segments = data.segments;
+    selected = null;
+    selectedSegments.clear();
+    renderTimeline();
+    alert("저장된 작업을 불러왔습니다.");
+}
+
+async function exportVideo() {
+    if (segments.length === 0) {
+        alert("추출할 구간이 없습니다.");
+        return;
+    }
+
+    const ordered = [...segments].sort((a,b) => a.start - b.start);
+
+    const payload = {
+        session_id: sessionId,
+        left_video:  leftVideoName,
+        right_video: rightVideoName,
+        left_src:    leftSrcPath,
+        right_src:   rightSrcPath,
+        segments:    ordered
+    };
+
+    const res  = await fetch("/full_export", {
+        method:  "POST",
+        headers: {"Content-Type": "application/json"},
+        body:    JSON.stringify(payload)
+    });
+    const data = await res.json();
+
+    if (!data.ok) {
+        alert("영상 추출 중 오류: " + (data.error || "알 수 없는 오류"));
+        return;
+    }
+
+    window.location.href = "/full_result?file=" + encodeURIComponent(data.file);
+}
+
+
+/* ======================= 11) 초기 설정 ======================= */
+buildRuler();
+renderTimeline();
+attachSelectionDrag(tlLeft);
+attachSelectionDrag(tlRight);
+attachTimelineClick();
+
+document.getElementById("addSegmentBtn").onclick = addSegment;
+playBtn.onclick = togglePlay;
+
+// Delete / Backspace 로 삭제
+document.addEventListener("keydown", e => {
+    if (e.key === "Delete" || e.key === "Del" || e.key === "Backspace") {
+        deleteSegment();
+    }
+});
+
+// 비디오 메타데이터 로딩 완료 후 렌더 루프 시작
+let metaLoaded = 0;
+function onMetaLoaded() {
+    metaLoaded++;
+    if (metaLoaded >= 2) {
+        currentTime = 0;
+        syncVideosToCurrentTime();
+        updateSeekUI();
+        startRenderLoop();
+    }
+}
+leftVideo.addEventListener("loadedmetadata", onMetaLoaded);
+rightVideo.addEventListener("loadedmetadata", onMetaLoaded);
+</script>
+
+</body>
+</html>

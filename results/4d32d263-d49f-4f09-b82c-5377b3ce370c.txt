@@ -1,0 +1,42 @@
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/2_10min.mp4'
+inpoint 97.08
+outpoint 105.08
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/2_10min.mp4'
+inpoint 115.57
+outpoint 126.34
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/2_10min.mp4'
+inpoint 147
+outpoint 156.4
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/2_10min.mp4'
+inpoint 166.33
+outpoint 174.33
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/2_10min.mp4'
+inpoint 207.52
+outpoint 215.52
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/2_10min.mp4'
+inpoint 278.8
+outpoint 286.8
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/2_10min.mp4'
+inpoint 299.23
+outpoint 307.23
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/2_10min.mp4'
+inpoint 332.72
+outpoint 340.72
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/2_10min.mp4'
+inpoint 375.11
+outpoint 383.11
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/2_10min.mp4'
+inpoint 445.23
+outpoint 456.76
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/2_10min.mp4'
+inpoint 506.45
+outpoint 514.45
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/2_10min.mp4'
+inpoint 551.14
+outpoint 560.77
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/2_10min.mp4'
+inpoint 570.66
+outpoint 578.66
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/2_10min.mp4'
+inpoint 28.2
+outpoint 36.2

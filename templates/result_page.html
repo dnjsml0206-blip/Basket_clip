@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>하이라이트 편집기</title>
+  <style>
+    body {
+      background:#000;
+      color:#fff;
+      font-family:sans-serif;
+      text-align:center;
+      margin:0;
+      padding:20px 0 40px;
+    }
+    h2 { margin-top:10px; }
+    video {
+      max-width:80%;
+      width:80%;
+      height:auto;
+      max-height:70vh;
+      background:#000;
+      border-radius:8px;
+      display:block;
+      margin:0 auto;
+    }
+    
+    /* 타임라인 래퍼 (스크롤 영역) */
+    #timelineWrapper {
+      width: 80%;
+      margin: 20px auto 5px auto;
+      overflow-x: auto;     /* 가로 스크롤 */
+      overflow-y: hidden;
+      white-space: nowrap;
+      background: transparent;
+      padding-bottom: 6px;
+    }
+
+    /* 실제 회색 막대 */
+    #timeline {
+      height:40px;
+      background:#333;
+      min-width: 800px;
+      position:relative;
+      border-radius:6px;
+      overflow:hidden;
+      user-select:none;
+    }
+
+    /* 현재 재생 위치 막대 (흰색 줄) */
+    #currentTimeBar {
+      position:absolute;
+      top:0;
+      bottom:0;
+      width:2px;
+      background:#fff;
+      pointer-events:none;
+      z-index:5;
+    }
+
+    .clip {
+      position:absolute;
+      height:40%;
+      top:30%;
+      border-radius:4px;
+      cursor:move;
+      box-sizing:border-box;
+    }
+    .clip.red  { background:rgba(255,0,0,0.6); }
+    .clip.blue { background:rgba(0,128,255,0.6); }
+
+    .handle {
+      position:absolute;
+      top:-10%;
+      width:4px;
+      height:120%;
+      background:#ccc;
+      cursor:ew-resize;
+    }
+    .handle.left  { left:0; }
+    .handle.right { right:0; }
+
+    .label {
+      position:absolute;
+      top:50%;
+      left:50%;
+      transform:translate(-50%, -50%);
+      font-size:12px;
+      font-weight:bold;
+      color:#fff;
+      text-shadow:0 0 2px #000;
+      pointer-events:none;
+    }
+
+    #ruler {
+      width:80%;
+      margin:0 auto 20px auto;
+      position:relative;
+      height:18px;
+      font-size:10px;
+      color:#ccc;
+    }
+    .tick {
+      position:absolute;
+      top:0;
+      height:100%;
+      border-left:1px solid #555;
+      padding-left:2px;
+      white-space:nowrap;
+    }
+
+    #selectionBox {
+      position:absolute;
+      top:0;
+      height:100%;
+      background:rgba(255,255,255,0.12);
+      border:1px dashed #fff;
+      pointer-events:none;
+      z-index:4;
+    }
+
+    button {
+      padding:8px 12px;
+      margin:5px;
+      border:none;
+      border-radius:6px;
+      background:#222;
+      color:#fff;
+      cursor:pointer;
+    }
+    button:hover { background:#444; }
+
+    select {
+      padding:5px 8px;
+      border-radius:4px;
+      border:none;
+      background:#222;
+      color:#fff;
+    }
+
+    #exportProgressContainer {
+      margin-top:15px;
+      display:none;
+    }
+
+    #exportProgressBar {
+      width:60%;
+      height:18px;
+    }
+
+    a { color:#0ff; }
+  </style>
+</head>
+<body>
+  <h2>🎬 하이라이트 편집기 - {{ video }}</h2>
+
+  <video id="resultVideo" controls>
+    <source src="/videos/{{ video }}" type="video/mp4">
+    브라우저가 video 태그를 지원하지 않습니다.
+  </video>
+
+  <!-- 타임라인 -->
+  <div id="timelineWrapper">
+    <div id="timeline">
+      <div id="currentTimeBar"></div>
+    </div>
+  </div>
+
+  <!-- 눈금자 -->
+  <div id="ruler"></div>
+
+  <!-- 구간 편집 버튼 -->
+  <div style="margin-top:10px;">
+    <div style="display:inline-flex; align-items:center; gap:10px; margin-right:10px;">
+      <div id="colorRedBtn" onclick="setCurrentColor('red')"
+           style="width:18px; height:18px; border-radius:50%; background:#ff4444; cursor:pointer; border:2px solid #fff;"></div>
+      <div id="colorBlueBtn" onclick="setCurrentColor('blue')"
+           style="width:18px; height:18px; border-radius:50%; background:#3399ff; cursor:pointer;"></div>
+    </div>
+
+    <button onclick="addClip()">+ 구간 추가</button>
+    <button onclick="deleteClip()">- 선택 구간 삭제</button>
+    <button onclick="setSelectedColor('red')">🔴 빨강</button>
+    <button onclick="setSelectedColor('blue')">🔵 파랑</button>
+    <button onclick="playHighlights()">🎬 하이라이트만 재생</button>
+  </div>
+
+  <div style="margin-top:10px;">
+    <button onclick="downloadHighlight()">✨ 전체 하이라이트 다운</button>
+    <button onclick="downloadColorHighlight('red')">🔴 빨강 하이라이트</button>
+    <button onclick="downloadColorHighlight('blue')">🔵 파랑 하이라이트</button>
+  </div>
+
+  <div style="margin-top:10px;">
+    <span>마킹 번호 선택: </span>
+    <select id="markerSelect">
+      <option value="">-- 번호 선택 --</option>
+    </select>
+    <button onclick="downloadPlayerHighlight()">👤 플레이어별 하이라이트</button>
+    <button onclick="saveAnalysis()">💾 저장</button>
+  </div>
+
+  <div id="exportProgressContainer">
+    <div>하이라이트 렌더링 중... <span id="exportStatusText"></span></div>
+    <progress id="exportProgressBar" value="0" max="100"></progress><br>
+    <button id="exportStopBtn" onclick="stopExport()">중지</button>
+  </div>
+
+  <div style="margin-top:15px;">
+    <a href="/">⬅ 분석 화면으로</a>
+  </div>
+
+<script>
+/* ===========================
+   기본 상태 변수들
+   =========================== */
+let currentColor = "red";
+function setCurrentColor(c) {
+  currentColor = c;
+  document.getElementById("colorRedBtn").style.border =
+      (c === "red") ? "2px solid #fff" : "none";
+  document.getElementById("colorBlueBtn").style.border =
+      (c === "blue") ? "2px solid #fff" : "none";
+}
+
+const videoName = "{{ video }}";
+let clipsData = {{ clips|tojson|safe }};
+if (!Array.isArray(clipsData)) clipsData = [];
+
+// 각 클립에 고유 id 부여
+let nextClipId = 1;
+let clips = clipsData.map(c => ({
+  id: nextClipId++,
+  start: c.start,
+  end: c.end,
+  color: c.color || "red",
+  label: c.label || null,
+  el: null
+}));
+
+const videoEl = document.getElementById("resultVideo");
+const timelineWrapper = document.getElementById("timelineWrapper");
+const timeline = document.getElementById("timeline");
+const ruler = document.getElementById("ruler");
+
+let selectedClips = new Set();
+let draggingClip = null;
+let resizingClip = null;
+let resizingSide = null;
+let dragOffsetX = 0;
+
+let isSelecting = false;
+let selectionBox = null;
+let selectionStartX = 0;
+
+let highlightQueue = [];
+let currentIndex = 0;
+let playingHighlights = false;
+let rafId = null;
+
+let currentLabelInput = "";
+let labelInputTimer = null;
+
+// export 관련
+let currentJobId = null;
+let exportPolling = false;
+
+/* ===========================
+   영상 메타데이터 로딩 후 초기화
+   =========================== */
+videoEl.addEventListener("loadedmetadata", () => {
+  const duration = videoEl.duration || 0;
+  if (duration > 0) {
+    const PX_PER_SEC = 10; // 1초당 10px
+    const pixelWidth = Math.max(800, duration * PX_PER_SEC);
+    timeline.style.width = pixelWidth + "px";
+
+    renderTimeline();
+    buildRuler();
+    startTimeBar();
+  }
+});
+
+/* ===========================
+   타임라인 렌더링
+   =========================== */
+function renderTimeline() {
+  const bar = document.getElementById("currentTimeBar");
+
+  // currentTimeBar는 남기고, 나머지 clip 요소만 제거
+  Array.from(timeline.children).forEach(ch => {
+    if (ch !== bar) timeline.removeChild(ch);
+  });
+
+  const dur = videoEl.duration || 0;
+  if (!dur) return;
+
+  const tlWidth = timeline.offsetWidth;
+  const pxPerSec = tlWidth / dur;
+
+  clips.forEach(c => {
+    const div = document.createElement("div");
+    div.className = "clip " + c.color;
+
+    const left = c.start * pxPerSec;
+    const width = (c.end - c.start) * pxPerSec;
+
+    div.style.left = left + "px";
+    div.style.width = width + "px";
+
+    c.el = div;
+    div.clipData = c;
+
+    addHandles(div, c);
+    timeline.appendChild(div);
+  });
+
+  updateSelectionStyles();
+  refreshMarkerOptions();
+}
+
+/* ===========================
+   눈금자
+   =========================== */
+function buildRuler() {
+  ruler.innerHTML = "";
+  const dur = videoEl.duration || 0;
+  if (!dur) return;
+
+  const step = dur > 600 ? 60 : (dur > 180 ? 30 : 10);
+
+  for (let t = 0; t <= dur + 0.001; t += step) {
+    const tick = document.createElement("div");
+    tick.className = "tick";
+    tick.style.left = (t / dur * 100) + "%";
+    tick.textContent = formatTime(t);
+    ruler.appendChild(tick);
+  }
+}
+
+function formatTime(t) {
+  t = Math.floor(t);
+  const m = Math.floor(t / 60);
+  const s = t % 60;
+  return m + ":" + String(s).padStart(2,"0");
+}
+
+/* ===========================
+   클립 핸들 / 이벤트
+   =========================== */
+function addHandles(div, clipData) {
+  const leftH = document.createElement("div");
+  leftH.className = "handle left";
+  const rightH = document.createElement("div");
+  rightH.className = "handle right";
+  div.appendChild(leftH);
+  div.appendChild(rightH);
+
+  // 클릭 → 선택 / 다중 선택
+  div.addEventListener("click", e => {
+    if (e.target.classList.contains("handle")) return;
+
+    if (!e.ctrlKey && !e.metaKey) selectedClips.clear();
+    if (selectedClips.has(clipData)) selectedClips.delete(clipData);
+    else selectedClips.add(clipData);
+
+    updateSelectionStyles();
+  });
+
+  // 🔥 더블클릭 → 해당 구간부터 하이라이트 재생 (id 기준으로 정확히 찾음)
+  div.addEventListener("dblclick", e => {
+    refreshClipTimes();
+
+    highlightQueue = clips.slice().sort((a,b)=>a.start - b.start);
+    currentIndex = highlightQueue.findIndex(c => c.id === clipData.id);
+    if (currentIndex < 0) currentIndex = 0;
+
+    playingHighlights = true;
+    videoEl.currentTime = clipData.start;
+    videoEl.play();
+
+    startHighlightLoop();
+  });
+
+  // 드래그 이동
+  div.addEventListener("mousedown", e => {
+    if (e.target.classList.contains("handle")) return;
+    const rect = timeline.getBoundingClientRect();
+    dragOffsetX = e.clientX - rect.left - div.offsetLeft;
+    draggingClip = div;
+  });
+
+  // 리사이즈
+  leftH.addEventListener("mousedown", e => {
+    e.stopPropagation();
+    resizingClip = div;
+    resizingSide = "left";
+  });
+  rightH.addEventListener("mousedown", e => {
+    e.stopPropagation();
+    resizingClip = div;
+    resizingSide = "right";
+  });
+}
+
+/* ===========================
+   마우스 이동 / 드래그 / 리사이즈 / 박스 선택
+   =========================== */
+document.addEventListener("mousemove", e => {
+  const rect = timeline.getBoundingClientRect();
+  const dur = videoEl.duration || 0;
+  if (!dur) return;
+
+  const tlWidth = timeline.offsetWidth;
+  const pxPerSec = tlWidth / dur;
+
+  // 클립 이동
+  if (draggingClip) {
+    let left = e.clientX - rect.left - dragOffsetX;
+    if (left < 0) left = 0;
+    if (left > tlWidth - draggingClip.offsetWidth)
+      left = tlWidth - draggingClip.offsetWidth;
+
+    draggingClip.style.left = left + "px";
+
+    const c = draggingClip.clipData;
+    const start = left / pxPerSec;
+    const end = (left + draggingClip.offsetWidth) / pxPerSec;
+
+    c.start = Math.round(start*100)/100;
+    c.end = Math.round(end*100)/100;
+    return;
+  }
+
+  // 리사이즈
+  if (resizingClip) {
+    const left = resizingClip.offsetLeft;
+    const width = resizingClip.offsetWidth;
+    const mouse = e.clientX - rect.left;
+
+    let newLeft = left;
+    let newWidth = width;
+
+    if (resizingSide === "left") {
+      newLeft = Math.min(mouse, left+width-10);
+      if (newLeft < 0) newLeft = 0;
+      newWidth = (left+width) - newLeft;
+    } else {
+      newWidth = mouse - left;
+      if (newWidth < 10) newWidth = 10;
+    }
+
+    if (newLeft + newWidth > tlWidth)
+      newWidth = tlWidth - newLeft;
+
+    resizingClip.style.left = newLeft + "px";
+    resizingClip.style.width = newWidth + "px";
+
+    const c = resizingClip.clipData;
+    c.start = Math.round((newLeft/pxPerSec)*100)/100;
+    c.end = Math.round(((newLeft+newWidth)/pxPerSec)*100)/100;
+    return;
+  }
+
+  // 선택 박스
+  if (isSelecting && selectionBox) {
+    const minX = Math.min(selectionStartX, e.clientX);
+    const maxX = Math.max(selectionStartX, e.clientX);
+    selectionBox.style.left = (minX - rect.left) + "px";
+    selectionBox.style.width = (maxX - minX) + "px";
+  }
+});
+
+document.addEventListener("mouseup", e => {
+  draggingClip = null;
+  resizingClip = null;
+  resizingSide = null;
+
+  if (isSelecting && selectionBox) {
+    const rect = timeline.getBoundingClientRect();
+    const minX = Math.min(selectionStartX, e.clientX);
+    const maxX = Math.max(selectionStartX, e.clientX);
+
+    selectedClips.clear();
+
+    clips.forEach(c => {
+      if (!c.el) return;
+      const cr = c.el.getBoundingClientRect();
+      const cx = (cr.left + cr.right) / 2;
+      if (cx >= minX && cx <= maxX) selectedClips.add(c);
+    });
+
+    updateSelectionStyles();
+    selectionBox.remove();
+    selectionBox = null;
+    isSelecting = false;
+  }
+});
+
+// 타임라인 빈영역 클릭 → 박스 선택 시작
+timeline.addEventListener("mousedown", e => {
+  if (e.target !== timeline) return;
+  isSelecting = true;
+
+  const rect = timeline.getBoundingClientRect();
+  selectionStartX = e.clientX;
+
+  selectionBox = document.createElement("div");
+  selectionBox.id = "selectionBox";
+  selectionBox.style.left = (e.clientX - rect.left) + "px";
+  selectionBox.style.width = "0px";
+  timeline.appendChild(selectionBox);
+});
+
+function updateSelectionStyles() {
+  clips.forEach(c => {
+    if (!c.el) return;
+    c.el.style.outline = selectedClips.has(c)
+        ? "2px solid #fff"
+        : "none";
+  });
+}
+
+/* ===========================
+   currentTimeBar 위치 업데이트
+   =========================== */
+function startTimeBar() {
+  function loop() {
+    const bar = document.getElementById("currentTimeBar");
+    const dur = videoEl.duration || 0;
+    const t = videoEl.currentTime || 0;
+
+    if (dur > 0) {
+      const tlWidth = timeline.offsetWidth;
+      const x = (t / dur) * tlWidth;
+      bar.style.left = x + "px";
+    } else {
+      bar.style.left = "0px";
+    }
+
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+}
+
+/* ===========================
+   영상 재생 → timeline 자동 스크롤
+   =========================== */
+videoEl.addEventListener("timeupdate", () => {
+  const dur = videoEl.duration || 0;
+  if (!dur) return;
+
+  const tlWidth = timeline.offsetWidth;
+  const wrapWidth = timelineWrapper.offsetWidth;
+
+  const x = (videoEl.currentTime / dur) * tlWidth;
+  let scrollLeft = x - wrapWidth / 2;
+
+  if (tlWidth > wrapWidth) {
+    if (scrollLeft < 0) scrollLeft = 0;
+    if (scrollLeft > tlWidth - wrapWidth) scrollLeft = tlWidth - wrapWidth;
+    timelineWrapper.scrollLeft = scrollLeft;
+  }
+});
+
+/* ===========================
+   클립 추가 / 삭제 / 색상 / 라벨
+   =========================== */
+function addClip() {
+  const dur = videoEl.duration || 0;
+  const now = videoEl.currentTime || 0;
+  if (!dur) {
+    alert("영상이 아직 로드되지 않았습니다.");
+    return;
+  }
+
+  const len = 7; // 현재 시점 기준 7초 앞쪽
+  let start = now - len;
+  let end = now;
+
+  if (start < 0) start = 0;
+  if (end > dur) end = dur;
+
+  const c = {
+    id: nextClipId++,
+    start: Math.round(start*100)/100,
+    end: Math.round(end*100)/100,
+    color: currentColor,
+    label: null,
+    el: null
+  };
+
+  clips.push(c);
+  renderTimeline();
+}
+
+function deleteClip() {
+  clips = clips.filter(c => !selectedClips.has(c));
+  selectedClips.clear();
+  renderTimeline();
+}
+
+function setSelectedColor(color) {
+  selectedClips.forEach(c => {
+    if (!c.el) return;
+    c.el.classList.remove("red","blue");
+    c.el.classList.add(color);
+    c.color = color;
+  });
+}
+
+/* 라벨 지정 */
+function applyLabelToSelected(label) {
+  selectedClips.forEach(c => {
+    c.label = label;
+    if (!c.el) return;
+    let span = c.el.querySelector(".label");
+    if (!span) {
+      span = document.createElement("div");
+      span.className = "label";
+      c.el.appendChild(span);
+    }
+    span.textContent = label;
+  });
+  refreshMarkerOptions();
+}
+
+function handleDigitKey(d) {
+  currentLabelInput += d;
+  if (currentLabelInput.length > 2) currentLabelInput = d;
+  if (selectedClips.size > 0) {
+    applyLabelToSelected(currentLabelInput);
+  }
+  if (labelInputTimer) clearTimeout(labelInputTimer);
+  labelInputTimer = setTimeout(() => { currentLabelInput = ""; }, 1500);
+}
+
+function refreshMarkerOptions() {
+  const markerSelect = document.getElementById("markerSelect");
+  const labels = Array.from(
+    new Set(clips.map(c => c.label).filter(v => v !== null && v !== ""))
+  ).sort((a,b) => parseInt(a) - parseInt(b));
+
+  markerSelect.innerHTML = '<option value="">-- 번호 선택 --</option>';
+  labels.forEach(lbl => {
+    const opt = document.createElement("option");
+    opt.value = lbl;
+    opt.textContent = lbl;
+    markerSelect.appendChild(opt);
+  });
+}
+
+/* ===========================
+   위치 최신화 (px → 초)
+   =========================== */
+function refreshClipTimes() {
+  const dur = videoEl.duration || 0;
+  const tlWidth = timeline.offsetWidth;
+  const pxPerSec = tlWidth / (dur || 1);
+
+  clips.forEach(c => {
+    if (!c.el) return;
+    const left = parseFloat(c.el.style.left) || 0;
+    const width = parseFloat(c.el.style.width) || 0;
+    c.start = Math.round((left/pxPerSec)*100)/100;
+    c.end   = Math.round(((left+width)/pxPerSec)*100)/100;
+  });
+}
+
+/* ===========================
+   저장
+   =========================== */
+function saveAnalysis() {
+  refreshClipTimes();
+
+  clips.forEach(c => {
+    if (!c.el) return;
+    if (c.el.classList.contains("red")) c.color = "red";
+    if (c.el.classList.contains("blue")) c.color = "blue";
+    const span = c.el.querySelector(".label");
+    if (span) c.label = span.textContent;
+  });
+
+  const data = {
+    video: videoName,
+    clips: clips.map(c => ({
+      start: c.start,
+      end: c.end,
+      color: c.color,
+      label: c.label
+    }))
+  };
+
+  fetch("/saved", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(data)
+  }).then(()=>alert("저장되었습니다."));
+}
+
+/* ===========================
+   Export 관련
+   =========================== */
+function collectCleanClips(targetClips) {
+  refreshClipTimes();
+  return targetClips.map(c => ({
+    start: c.start,
+    end: c.end
+  }));
+}
+
+function startExport(cleanClips) {
+  if (!cleanClips.length) {
+    alert("구간이 없습니다!");
+    return;
+  }
+
+  const container = document.getElementById("exportProgressContainer");
+  const bar = document.getElementById("exportProgressBar");
+  const statusText = document.getElementById("exportStatusText");
+  const stopBtn = document.getElementById("exportStopBtn");
+
+  container.style.display = "block";
+  bar.value = 0;
+  statusText.textContent = "";
+  stopBtn.disabled = false;
+  document.body.style.cursor = "wait";
+
+  fetch("/export", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({
+      video: videoName,
+      clips: cleanClips
+    })
+  })
+  .then(r => r.json())
+  .then(data => {
+    document.body.style.cursor = "default";
+    if (!data.job_id) {
+      alert("하이라이트 생성 시작 실패: " + (data.error || "오류"));
+      return;
+    }
+    currentJobId = data.job_id;
+    window._export_result_file = data.file;  // 예: /results/highlight_xxx.mp4
+    exportPolling = true;
+    pollExport();
+  })
+  .catch(err => {
+    document.body.style.cursor = "default";
+    alert("요청 실패: " + err);
+  });
+}
+
+function pollExport() {
+  if (!currentJobId) return;
+  fetch("/export_progress?job_id=" + encodeURIComponent(currentJobId))
+    .then(r => r.json())
+    .then(data => {
+      const bar = document.getElementById("exportProgressBar");
+      const statusText = document.getElementById("exportStatusText");
+      const p = data.progress || 0;
+      bar.value = p;
+      statusText.textContent = (data.status || "") + " (" + p + "%)";
+
+      if (data.status === "done") {
+        exportPolling = false;
+        const url = window._export_result_file;
+        currentJobId = null;
+        window.location.href = url;
+      } else if (data.status === "error" || data.status === "stopped") {
+        exportPolling = false;
+        currentJobId = null;
+        alert("하이라이트 생성 실패 / 중지: " + (data.error || data.status));
+      } else if (exportPolling) {
+        setTimeout(pollExport, 1000);
+      }
+    })
+    .catch(() => {
+      if (exportPolling) setTimeout(pollExport, 1500);
+    });
+}
+
+function stopExport() {
+  if (!currentJobId) return;
+  document.getElementById("exportStopBtn").disabled = true;
+  fetch("/export_stop", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ job_id: currentJobId })
+  });
+}
+
+/* -----------------------
+   Export 헬퍼 버튼
+   ----------------------- */
+function downloadHighlight() {
+  if (!clips.length) {
+    alert("구간이 없습니다!");
+    return;
+  }
+  startExport(collectCleanClips(clips));
+}
+
+function downloadColorHighlight(color) {
+  const target = clips.filter(c => c.color === color);
+  if (!target.length) {
+    alert(color === "red" ? "빨간 구간이 없습니다." : "파란 구간이 없습니다.");
+    return;
+  }
+  startExport(collectCleanClips(target));
+}
+
+function downloadPlayerHighlight() {
+  const markerSelect = document.getElementById("markerSelect");
+  const marker = markerSelect.value;
+  if (!marker) {
+    alert("마킹 번호를 선택하세요.");
+    return;
+  }
+  const target = clips.filter(c => c.label === marker);
+  if (!target.length) {
+    alert("해당 번호의 구간이 없습니다.");
+    return;
+  }
+  startExport(collectCleanClips(target));
+}
+
+/* ===========================
+   하이라이트 자동 재생
+   =========================== */
+function startHighlightLoop() {
+  cancelAnimationFrame(rafId);
+  function loop() {
+    if (!playingHighlights) return;
+    const cur = highlightQueue[currentIndex];
+    if (videoEl.currentTime >= cur.end - 0.05) {
+      currentIndex++;
+      if (currentIndex >= highlightQueue.length) {
+        playingHighlights = false;
+        videoEl.pause();
+        return;
+      }
+      const next = highlightQueue[currentIndex];
+      videoEl.currentTime = next.start;
+      videoEl.play();
+    }
+    rafId = requestAnimationFrame(loop);
+  }
+  rafId = requestAnimationFrame(loop);
+}
+
+function playHighlights() {
+  refreshClipTimes();
+  if (selectedClips.size > 0) {
+    highlightQueue = Array.from(selectedClips).sort((a,b)=>a.start - b.start);
+  } else {
+    highlightQueue = clips.slice().sort((a,b)=>a.start - b.start);
+  }
+  if (!highlightQueue.length) {
+    alert("하이라이트 구간이 없습니다.");
+    return;
+  }
+  currentIndex = 0;
+  playingHighlights = true;
+  videoEl.currentTime = highlightQueue[0].start;
+  videoEl.play();
+  startHighlightLoop();
+}
+
+/* ===========================
+   키보드 이벤트 (Delete / 숫자)
+   =========================== */
+document.addEventListener("keydown", e => {
+  const tag = (e.target.tagName || "").toUpperCase();
+  if (tag === "INPUT" || tag === "SELECT" || e.target.isContentEditable) return;
+
+  if (e.key === "Delete" || e.key === "Backspace") {
+    deleteClip();
+  } else if (e.key >= "0" && e.key <= "9") {
+    handleDigitKey(e.key);
+  }
+});
+
+</script>
+
+</body>
+</html>

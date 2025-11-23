@@ -1,0 +1,3 @@
+file 'd:\Users\JWL\Desktop\YOLO\농구 동영상\240928_10s.mp4'
+inpoint 2.13
+outpoint 3.13

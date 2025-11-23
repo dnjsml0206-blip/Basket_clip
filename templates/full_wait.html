@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>교차편집 진행 중...</title>
+<style>
+    body { background:#111; color:#fff; text-align:center; font-family:sans-serif; padding-top:40px; }
+    progress { width:80%; height:30px; margin-top:20px; }
+</style>
+</head>
+<body>
+
+<h2>🎥 교차 편집 중…</h2>
+<p id="status">준비 중...</p>
+<progress id="bar" value="0" max="100"></progress>
+
+<script>
+async function poll() {
+    const res = await fetch("/full_progress?ts=" + Date.now());
+    const data = await res.json();
+
+    document.getElementById("bar").value = data.progress || 0;
+    document.getElementById("status").innerText =
+        "상태: " + data.status + " (" + (data.progress || 0) + "%)";
+
+    if (data.status === "done") {
+        const file = data.clips?.file;
+        if (file) {
+            window.location.href = "/full_result?file=" + encodeURIComponent(file);
+        }
+        return;
+    }
+
+    if (data.status === "error") {
+        alert("교차 편집 중 오류 발생!");
+        return;
+    }
+
+    setTimeout(poll, 1000);
+}
+
+poll();
+</script>
+
+</body>
+</html>

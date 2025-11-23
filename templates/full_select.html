@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>좌/우 영상 선택</title>
+<style>
+body { background:#111; color:white; text-align:center; padding:40px; font-family:sans-serif; }
+select,button { padding:10px; margin:10px; border-radius:6px; }
+.progress { width:80%; height:30px; display:none; margin-top:20px; }
+.sync-info { margin-top:15px; color:#0f0; font-size:14px; }
+</style>
+</head>
+
+<body>
+
+<h2>🎬 교차 편집용 영상 선택</h2>
+
+<p>좌측 / 우측 카메라 영상을 선택해주세요.</p>
+
+<select id="left">
+    <option value="">-- 좌측 영상 선택 --</option>
+    {% for v in videos %}
+    <option value="{{v}}">{{v}}</option>
+    {% endfor %}
+</select><br>
+
+<select id="right">
+    <option value="">-- 우측 영상 선택 --</option>
+    {% for v in videos %}
+    <option value="{{v}}">{{v}}</option>
+    {% endfor %}
+</select><br>
+
+<div id="syncMsg"></div>
+
+<button onclick="goNext()">다음 단계</button>
+
+<script>
+let syncDB = {{ sync_db|tojson if sync_db is defined else '{}' }};
+
+async function goNext() {
+    const left  = document.getElementById("left").value;
+    const right = document.getElementById("right").value;
+
+    if (!left || !right) {
+        alert("좌/우 영상을 모두 선택해주세요.");
+        return;
+    }
+
+    // 1️⃣ YOLO 분석 파일 있는지 체크
+    let saved = [];
+    try {
+        saved = await fetch("/saved", { cache: "no-store" }).then(r => r.json());
+    } catch (e) {
+        alert("저장된 분석 정보를 불러오지 못했습니다.");
+        return;
+    }
+
+    const hasLeft  = saved.some(s => s.video === left);
+    const hasRight = saved.some(s => s.video === right);
+
+    if (!hasLeft || !hasRight) {
+        alert("아직 YOLO 분석이 끝나지 않은 영상이 있습니다. 먼저 분석을 진행해주세요.");
+        return;
+    }
+
+    // 2️⃣ 싱크 저장 여부 확인
+    let syncDB = await fetch("/api_sync_list").then(r => r.json());
+    let key = `${left}__${right}`;
+
+    if (syncDB[key] !== undefined) {
+        const offset = syncDB[key];
+
+        const useOld = confirm(
+            `이전에 싱크 작업 기록이 있습니다.\n\n` +
+            `저장된 싱크 offset = ${offset} 초\n\n` +
+            `불러오려면 [확인], 새로 맞추려면 [취소]`
+        );
+
+        if (useOld) {
+            window.location.href =
+                `/full?left=${encodeURIComponent(left)}` +
+                `&right=${encodeURIComponent(right)}` +
+                `&use_saved_sync=1`;
+            return;
+        }
+    }
+
+    // 3️⃣ 기존 싱크 없거나 새로 만들기를 선택
+    window.location.href =
+        `/full_sync?left=${encodeURIComponent(left)}` +
+        `&right=${encodeURIComponent(right)}`;
+}
+</script>
+
+</body>
+</html>

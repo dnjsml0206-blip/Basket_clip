@@ -1,0 +1,90 @@
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/20251115_r.mp4'
+inpoint 162.84
+outpoint 174.04
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/20251115_r.mp4'
+inpoint 287.59
+outpoint 295.59
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/20251115_r.mp4'
+inpoint 309.89
+outpoint 323.12
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/20251115_r.mp4'
+inpoint 354.15
+outpoint 362.15
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/20251115_r.mp4'
+inpoint 375.65
+outpoint 383.65
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/20251115_r.mp4'
+inpoint 401.81
+outpoint 409.81
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/20251115_r.mp4'
+inpoint 453.7
+outpoint 461.7
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/20251115_r.mp4'
+inpoint 478.76
+outpoint 486.76
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/20251115_r.mp4'
+inpoint 1474.72
+outpoint 1482.72
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/20251115_r.mp4'
+inpoint 1494.4
+outpoint 1502.4
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/20251115_r.mp4'
+inpoint 1551.44
+outpoint 1559.44
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/20251115_r.mp4'
+inpoint 1617.63
+outpoint 1625.63
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/20251115_r.mp4'
+inpoint 1646.69
+outpoint 1654.69
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/20251115_r.mp4'
+inpoint 1828.27
+outpoint 1836.27
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/20251115_r.mp4'
+inpoint 2153
+outpoint 2161
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/20251115_r.mp4'
+inpoint 2353.1
+outpoint 2360.28
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/20251115_r.mp4'
+inpoint 2374.8
+outpoint 2382.08
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/20251115_r.mp4'
+inpoint 2664.88
+outpoint 2672.88
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/20251115_r.mp4'
+inpoint 2759.13
+outpoint 2767.13
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/20251115_r.mp4'
+inpoint 2824.49
+outpoint 2832.49
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/20251115_r.mp4'
+inpoint 3561
+outpoint 3569
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/20251115_r.mp4'
+inpoint 4022.1
+outpoint 4030.1
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/20251115_r.mp4'
+inpoint 4370.04
+outpoint 4378.04
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/20251115_r.mp4'
+inpoint 4410
+outpoint 4420.34
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/20251115_r.mp4'
+inpoint 4571
+outpoint 4579
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/20251115_r.mp4'
+inpoint 4824.17
+outpoint 4832.17
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/20251115_r.mp4'
+inpoint 4890
+outpoint 4898
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/20251115_r.mp4'
+inpoint 4913.12
+outpoint 4921.12
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/20251115_r.mp4'
+inpoint 5201.38
+outpoint 5209.38
+file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/20251115_r.mp4'
+inpoint 5261.81
+outpoint 5269.81

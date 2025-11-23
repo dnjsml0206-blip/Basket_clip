@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>🎬 교차 편집 결과</title>
+
+    <style>
+        body {
+            background: #121212;
+            color: #fff;
+            font-family: sans-serif;
+            padding: 24px;
+        }
+
+        h2 { margin-top: 0; }
+
+        /* --------- 메인 프리뷰 영역 --------- */
+        #previewCanvas {
+            width: 100%;
+            max-height: 440px;
+            background: #000;
+            border-radius: 8px;
+        }
+
+        .control-bar {
+            margin-top: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #playPauseBtn, #playCrossBtn {
+            padding: 6px 14px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            background: #0af;
+            color: #000;
+            font-size: 14px;
+        }
+
+        #playCrossBtn {
+            background: #ff0;
+            font-weight: bold;
+        }
+
+        #timeLabel {
+            font-size: 13px;
+            color: #ccc;
+            min-width: 90px;
+        }
+
+        #seekSlider {
+            flex: 1;
+        }
+
+        /* --------- 타임라인 + Ruler 스크롤 영역 --------- */
+        #timelineWrapper {
+            margin-top: 20px;
+            width: 100%;
+            overflow-x: auto;   /* 🔥 좌우 스크롤 */
+            overflow-y: hidden;
+            padding-bottom: 8px;
+        }
+
+        .timeline-inner {
+            width: 3000px;      /* 스크롤 생기도록 가로로 길게 */
+        }
+
+        .timeline-box {
+            margin-top: 10px;
+        }
+
+        .timeline-label {
+            font-size: 13px;
+            margin-bottom: 4px;
+            color: #ccc;
+        }
+
+        .timeline {
+            height: 20px;
+            background: #666;
+            margin-top: 4px;
+            position: relative;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .selection-box {
+            position: absolute;
+            top: 0;
+            height: 100%;
+            background: rgba(0,150,255,0.25);
+            border: 1px solid #09f;
+            pointer-events: none;
+        }
+
+        .segment {
+            position: absolute;
+            top: 0;
+            height: 100%;
+            background: rgba(0, 200, 255, 0.4);
+            border: 1px solid #00e1ff;
+            box-sizing: border-box;
+        }
+
+        /* --------- Ruler (타임라인과 함께 스크롤) --------- */
+        .ruler {
+            margin-top: 10px;
+            height: 20px;
+            position: relative;
+            font-size: 10px;
+            color: #aaa;
+        }
+
+        .tick {
+            position: absolute;
+            top: 0;
+            height: 8px;
+            width: 1px;
+            background: #aaa;
+        }
+
+        .tick-label {
+            position: absolute;
+            top: 10px;
+            font-size: 10px;
+            transform: translateX(-50%);
+        }
+
+        /* --------- 하단 버튼 --------- */
+        .btn-row {
+            margin-top: 24px;
+        }
+
+        .btn-nav {
+            padding: 8px 16px;
+            margin-right: 8px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .btn-main {
+            background: #0af;
+            color: #000;
+            font-weight: bold;
+        }
+
+        .btn-sec {
+            background: #444;
+            color: #fff;
+        }
+
+        .info-box {
+            margin-top: 16px;
+            font-size: 13px;
+            color: #aaa;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+
+<body>
+
+<h2>🎉 교차 편집 결과 미리보기</h2>
+
+<!-- 실제 재생 소스 (좌/우, 오디오는 left 사용) -->
+<video id="leftVideo"  src="/full_file?p={{ left_src }}"  style="display:none"></video>
+<video id="rightVideo" src="/full_file?p={{ right_src }}" muted style="display:none"></video>
+
+<!-- 두 영상을 겹쳐서 보여줄 Canvas (1개만 사용) -->
+<canvas id="previewCanvas" width="1280" height="720"></canvas>
+
+<!-- 재생 컨트롤 + 교차 재생 -->
+<div class="control-bar">
+    <button id="playPauseBtn">▶ 재생</button>
+    <button id="playCrossBtn">⏯ 교차 재생</button>
+    <span id="timeLabel">00:00 / 00:00</span>
+    <input type="range" id="seekSlider" min="0" max="1000" value="0">
+</div>
+
+<!-- 타임라인 + Ruler (모두 하나의 스크롤 영역 안에) -->
+<div id="timelineWrapper">
+    <div class="timeline-inner">
+        <div class="timeline-box">
+            <div class="timeline-label">좌측 카메라</div>
+            <div id="timelineLeft" class="timeline"></div>
+        </div>
+
+        <div class="timeline-box">
+            <div class="timeline-label">우측 카메라</div>
+            <div id="timelineRight" class="timeline"></div>
+        </div>
+
+        <!-- 공통 Ruler (타임라인들과 같이 스크롤) -->
+        <div id="ruler" class="ruler"></div>
+    </div>
+</div>
+
+<div class="btn-row">
+    <button class="btn-nav btn-main" onclick="location.href='/full_select'">다른 영상 편집하기</button>
+    <button class="btn-nav btn-sec" onclick="location.href='/'">홈으로 이동</button>
+</div>
+
+<div class="info-box">
+    • 위 캔버스는 좌/우 카메라 영상을 <b>싱크 맞춘 상태</b>로 하나의 화면에 표시합니다.<br>
+    • 아래 회색 막대는 좌/우 각각의 촬영 구간이며, 색 막대는 <b>교차 편집에서 사용된 구간</b>을 의미합니다.<br>
+    • 타임라인 빈 곳을 클릭하면 해당 시점으로 이동하고, 교차 재생을 누르면 전체 구간을 자동 전환하며 재생합니다.
+</div>
+
+<script>
+/* ======================= 템플릿 데이터 ======================= */
+const sessionId      = "{{ session_id }}";
+const duration       = Number({{ duration }});   // 전체 길이(초)
+const leftSrcPath    = "{{ left_src }}";
+const rightSrcPath   = "{{ right_src }}";
+const leftVideoName  = "{{ left_video }}";
+const rightVideoName = "{{ right_video }}";
+const offset         = Number({{ offset|default(0) }});  // 필요 시 사용 (현재는 잘린 영상 기준이라 0이어야 정상)
+
+/* 좌/우 교차 세그먼트 (빈 시간대 없이 전체 덮는 형태) */
+let leftClips  = {{ left_clips  | tojson }};
+let rightClips = {{ right_clips | tojson }};
+
+/* 내부 segments: { start, end, side } */
+let segments = [];
+leftClips.forEach(c  => segments.push({ start: c.start, end: c.end, side: "left"  }));
+rightClips.forEach(c => segments.push({ start: c.start, end: c.end, side: "right" }));
+// 시간순 정렬 보장
+segments.sort((a,b) => a.start - b.start);
+
+let currentTime = 0;
+let playing = false;
+let crossPlaying = false;
+
+/* 재생 관련 DOM */
+const leftVideo  = document.getElementById("leftVideo");
+const rightVideo = document.getElementById("rightVideo");
+const canvas     = document.getElementById("previewCanvas");
+const ctx        = canvas.getContext("2d");
+
+const tlLeft  = document.getElementById("timelineLeft");
+const tlRight = document.getElementById("timelineRight");
+const ruler   = document.getElementById("ruler");
+const playBtn = document.getElementById("playPauseBtn");
+const crossBtn = document.getElementById("playCrossBtn");
+const seek    = document.getElementById("seekSlider");
+const timeLbl = document.getElementById("timeLabel");
+
+
+/* ======================= 1) 시간 포맷 & UI ======================= */
+function formatTime(sec) {
+    if (!isFinite(sec)) sec = 0;
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return String(m).padStart(2,"0") + ":" + String(s).padStart(2,"0");
+}
+
+function updateSeekUI() {
+    if (!duration || !isFinite(duration) || duration <= 0) {
+        seek.value = 0;
+        timeLbl.textContent = "00:00 / 00:00";
+        return;
+    }
+    const ratio = currentTime / duration;
+    seek.value = Math.max(0, Math.min(1000, Math.floor(ratio * 1000)));
+    timeLbl.textContent = `${formatTime(currentTime)} / ${formatTime(duration)}`;
+}
+
+function updatePlayButton() {
+    playBtn.textContent  = playing ? "⏸ 일시정지" : "▶ 재생";
+    crossBtn.textContent = crossPlaying ? "■ 교차 재생 중지" : "⏯ 교차 재생";
+}
+
+
+/* ======================= 2) 싱크 맞춰 비디오 위치시키기 ======================= */
+function syncVideosToCurrentTime() {
+    // 기준: leftTime = currentTime
+    leftVideo.currentTime = currentTime;
+
+    // offset 을 고려한 rightTime (현재 offset=0이 정상)
+    let rt = currentTime - offset;
+    if (rt < 0) rt = 0;
+    if (rightVideo.duration && rt > rightVideo.duration) rt = rightVideo.duration;
+    rightVideo.currentTime = rt;
+}
+
+
+/* ======================= 3) 어떤 카메라를 보여줄지 결정 ======================= */
+function getCameraForTime(t) {
+    // segments 전체를 순회해서 해당 시간에 포함되는 마지막 segment 선택
+    let cam = "left";
+    for (const seg of segments) {
+        if (t >= seg.start && t < seg.end) {
+            cam = seg.side;
+        }
+    }
+    return cam;
+}
+
+
+/* ======================= 4) Ruler & 타임라인 렌더 ======================= */
+function buildRuler() {
+    ruler.innerHTML = "";
+    if (!duration || !isFinite(duration) || duration <= 0) return;
+
+    const step = duration <= 60 ? 5 : 10;
+    for (let t = 0; t <= duration; t += step) {
+        const xRatio = t / duration;
+        const xPercent = xRatio * 100;
+
+        const tick = document.createElement("div");
+        tick.className = "tick";
+        tick.style.left = xPercent + "%";
+        ruler.appendChild(tick);
+
+        const label = document.createElement("div");
+        label.className = "tick-label";
+        label.style.left = xPercent + "%";
+        label.innerText = `${t}s`;
+        ruler.appendChild(label);
+    }
+}
+
+function renderTimeline() {
+    tlLeft.innerHTML  = "";
+    tlRight.innerHTML = "";
+
+    const pxLeft  = tlLeft.clientWidth  || 1;
+    const pxRight = tlRight.clientWidth || 1;
+
+    segments.forEach(seg => {
+        const tl      = seg.side === "left" ? tlLeft : tlRight;
+        const tlWidth = seg.side === "left" ? pxLeft : pxRight;
+
+        const box = document.createElement("div");
+        box.className = "segment";
+
+        const left = (seg.start / duration) * 100;
+        const width = ((seg.end - seg.start) / duration) * 100;
+        box.style.left  = left + "%";
+        box.style.width = width + "%";
+
+        // 클릭 → 해당 시점으로 점프 (자유 재생)
+        box.addEventListener("click", (e) => {
+            e.stopPropagation();
+            currentTime = seg.start;
+            syncVideosToCurrentTime();
+            updateSeekUI();
+        });
+
+        tl.appendChild(box);
+    });
+}
+
+
+/* ======================= 5) 타임라인 빈 공간 클릭 → 시점 이동 ======================= */
+function attachTimelineClick() {
+    function bind(timelineElem) {
+        timelineElem.addEventListener("click", (e) => {
+            if (e.target.classList.contains("segment")) return;
+
+            const rect  = timelineElem.getBoundingClientRect();
+            const ratio = (e.clientX - rect.left) / rect.width;
+            let t = ratio * duration;
+            t = Math.max(0, Math.min(duration, t));
+
+            currentTime = t;
+            syncVideosToCurrentTime();
+            updateSeekUI();
+        });
+    }
+    bind(tlLeft);
+    bind(tlRight);
+}
+
+
+/* ======================= 6) 재생/교차 재생 ======================= */
+function playVideos() {
+    leftVideo.play().catch(()=>{});
+    rightVideo.play().catch(()=>{});
+}
+
+function pauseVideos() {
+    leftVideo.pause();
+    rightVideo.pause();
+}
+
+function togglePlay() {
+    if (!duration || duration <= 0) return;
+
+    if (playing) {
+        playing = false;
+        pauseVideos();
+    } else {
+        playing = true;
+        crossPlaying = false; // 개별 재생 시작 시 교차 재생 플래그 해제
+        syncVideosToCurrentTime();
+        playVideos();
+    }
+    updatePlayButton();
+}
+
+function startCrossPlay() {
+    if (!duration || duration <= 0) {
+        alert("재생할 영상이 없습니다.");
+        return;
+    }
+    // 처음부터 전체 교차 재생
+    currentTime = 0;
+    syncVideosToCurrentTime();
+    playing = true;
+    crossPlaying = true;
+    playVideos();
+    updatePlayButton();
+}
+
+function stopCrossPlay() {
+    crossPlaying = false;
+    playing = false;
+    pauseVideos();
+    updatePlayButton();
+}
+
+
+/* ======================= 7) Seek 바 ======================= */
+seek.addEventListener("input", (e) => {
+    const val   = Number(e.target.value);
+    const ratio = val / 1000;
+    currentTime = duration * ratio;
+    syncVideosToCurrentTime();
+    updateSeekUI();
+});
+
+seek.addEventListener("change", () => {
+    if (!playing) pauseVideos();
+});
+
+
+/* ======================= 8) Canvas 렌더 루프 ======================= */
+function drawFrame(cam) {
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    try {
+        // 기본은 left 먼저
+        ctx.drawImage(leftVideo, 0, 0, w, h);
+    } catch(e) {}
+
+    if (cam === "right") {
+        try {
+            ctx.drawImage(rightVideo, 0, 0, w, h);
+        } catch(e) {}
+    }
+}
+
+function startRenderLoop() {
+    function loop() {
+        if (playing) {
+            // left 를 기준 타임라인으로 사용
+            currentTime = leftVideo.currentTime;
+            if (currentTime >= duration) {
+                currentTime = duration;
+                playing = false;
+                crossPlaying = false;
+                pauseVideos();
+                updatePlayButton();
+            } else {
+                // right 는 offset 반영해서 따라가게
+                let rt = currentTime - offset;
+                if (rt < 0) rt = 0;
+                if (rightVideo.duration && rt > rightVideo.duration) rt = rightVideo.duration;
+                rightVideo.currentTime = rt;
+            }
+        }
+
+        const cam = getCameraForTime(currentTime);
+        drawFrame(cam);
+        updateSeekUI();
+
+        requestAnimationFrame(loop);
+    }
+    loop();
+}
+
+
+/* ======================= 9) 초기화 ======================= */
+buildRuler();
+renderTimeline();
+attachTimelineClick();
+updateSeekUI();
+updatePlayButton();
+
+playBtn.onclick  = togglePlay;
+crossBtn.onclick = () => {
+    if (crossPlaying) {
+        stopCrossPlay();
+    } else {
+        startCrossPlay();
+    }
+};
+
+// 비디오 메타데이터 로딩 완료 후 렌더 루프 시작
+let metaLoaded = 0;
+function onMetaLoaded() {
+    metaLoaded++;
+    if (metaLoaded >= 2) {
+        currentTime = 0;
+        syncVideosToCurrentTime();
+        updateSeekUI();
+        startRenderLoop();
+    }
+}
+leftVideo.addEventListener("loadedmetadata", onMetaLoaded);
+rightVideo.addEventListener("loadedmetadata", onMetaLoaded);
+
+</script>
+
+</body>
+</html>
