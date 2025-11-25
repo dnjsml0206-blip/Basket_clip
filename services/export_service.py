@@ -4,7 +4,7 @@ import uuid
 import shutil
 from pathlib import Path
 import config
-
+from services.r2_service import download_to_path
 
 def escape(p: Path):
     return str(p).replace("\\", "/")
@@ -16,14 +16,15 @@ class ExportManager:
         self.lock = threading.Lock()
         self.process = {}
 
-    # ---------------------------------------------------------
-    # Job 생성
-    # ---------------------------------------------------------
-    def create_job(self, video, clips):
+        # ffmpeg용 임시 디렉터리
+        self.temp_dir = config.TMP_DIR / "export"
+        self.temp_dir.mkdir(parents=True, exist_ok=True)
+
+    def create_job(self, video_name, clips):
         job_id = str(uuid.uuid4())
         with self.lock:
             self.jobs[job_id] = {
-                "video": video,
+                "video": video_name,
                 "clips": clips,
                 "progress": 0,
                 "status": "pending",
@@ -32,9 +33,6 @@ class ExportManager:
             }
         return job_id
 
-    # ---------------------------------------------------------
-    # STOP 요청
-    # ---------------------------------------------------------
     def stop(self, job_id):
         with self.lock:
             if job_id in self.process:
@@ -46,11 +44,11 @@ class ExportManager:
                 self.jobs[job_id]["stop"] = True
                 self.jobs[job_id]["status"] = "stopped"
 
-    # ---------------------------------------------------------
-    # ffmpeg 기반 export worker
-    # ---------------------------------------------------------
-    def worker(self, job_id, video_path: Path, final_output: Path):
-
+    def worker(self, job_id, video_name: str, final_output: Path):
+        """
+        video_name: 원본 파일 이름 (R2: videos/{video_name})
+        final_output: TMP_DIR 안 임시 mp4 경로
+        """
         job = self.jobs[job_id]
         clips = job["clips"]
 
@@ -64,150 +62,102 @@ class ExportManager:
                 job["status"] = "error"
             return
 
-        # ---------------------------------------------------------
-        # 🔥 로그 파일 생성
-        # ---------------------------------------------------------
-        error_log = final_output.with_suffix(".log")
-        with open(error_log, "w", encoding="utf-8") as f:
-            f.write("==== EXPORT START ====\n")
-            f.write(f"VIDEO: {video_path}\n")
-            f.write(f"CLIPS: {clips}\n")
+        # 1) R2 → 로컬 temp 로 다운로드
+        local_video = self.temp_dir / f"export_src_{job_id}_{video_name}"
+        key = f"videos/{video_name}"
+        try:
+            download_to_path(key, local_video)
+        except Exception as e:
+            print("R2 다운로드 실패 (export):", e)
+            with self.lock:
+                job["status"] = "error"
+            return
 
-        # ---------------------------------------------------------
-        # 🔥 개별 클립을 results/tmp_clips/ 에 저장
-        # ---------------------------------------------------------
-        temp_dir = config.RESULT_DIR / "tmp_clips"
-        temp_dir.mkdir(parents=True, exist_ok=True)
+        # 2) ffmpeg concat용 임시 파일들
+        temp_txt = self.temp_dir / f"{job_id}.txt"
+        temp_out = self.temp_dir / f"{job_id}.mp4"
 
-        temp_clips = []
+        with open(temp_txt, "w", encoding="utf-8") as f:
+            for c in clips:
+                f.write(f"file '{escape(local_video)}'\n")
+                f.write(f"inpoint {c['start']}\n")
+                f.write(f"outpoint {c['end']}\n")
 
-        for idx, c in enumerate(clips):
-            out_clip = temp_dir / f"{job_id}_{idx}.mp4"
-            temp_clips.append(out_clip)
-
-            cmd = [
-                "ffmpeg",
-                "-y",
-                "-ss", str(c["start"]),
-                "-to", str(c["end"]),
-                "-i", f"\"{escape(video_path)}\"",
-                "-c:v", "copy",
-                "-c:a", "copy",
-                f"\"{escape(out_clip)}\""
-            ]
-
-            full_cmd = " ".join(cmd)
-
-            try:
-                proc = subprocess.Popen(
-                    full_cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    shell=True
-                )
-                self.process[job_id] = proc
-
-                stderr_text = proc.stderr.read()
-
-                with open(error_log, "a", encoding="utf-8") as f:
-                    f.write(f"\n--- CLIP #{idx} LOG ---\n")
-                    f.write(stderr_text)
-
-                proc.wait()
-
-                if job["stop"]:
-                    raise Exception("STOP")
-
-                if proc.returncode != 0 or not out_clip.exists():
-                    raise Exception(f"Clip {idx} failed")
-
-            except Exception as e:
-                with open(error_log, "a", encoding="utf-8") as f:
-                    f.write(f"\nERROR: {str(e)}\n")
-
-                with self.lock:
-                    job["status"] = "error"
-                return
-
-        # ---------------------------------------------------------
-        # 🔥 concat 리스트 생성
-        # ---------------------------------------------------------
-        list_file = temp_dir / f"{job_id}.txt"
-        with open(list_file, "w", encoding="utf-8") as f:
-            for clip in temp_clips:
-                f.write(f"file '{escape(clip)}'\n")
-
-        # ---------------------------------------------------------
-        # 🔥 concat 실행
-        # ---------------------------------------------------------
-        cmd2 = [
+        cmd = [
             "ffmpeg",
             "-y",
             "-safe", "0",
             "-f", "concat",
-            "-i", f"\"{escape(list_file)}\"",
+            "-i", escape(temp_txt),
             "-c:v", "copy",
             "-c:a", "copy",
-            f"\"{escape(final_output)}\""
+            str(temp_out)
         ]
 
-        full_cmd2 = " ".join(cmd2)
-
         try:
-            proc2 = subprocess.Popen(
-                full_cmd2,
+            proc = subprocess.Popen(
+                cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                shell=True
+                bufsize=1
             )
-            self.process[job_id] = proc2
+        except FileNotFoundError:
+            with self.lock:
+                job["status"] = "error"
+            return
 
-            stderr_text2 = proc2.stderr.read()
+        self.process[job_id] = proc
 
-            with open(error_log, "a", encoding="utf-8") as f:
-                f.write("\n--- CONCAT LOG ---\n")
-                f.write(stderr_text2)
+        try:
+            for line in proc.stderr:
+                if job["stop"]:
+                    proc.kill()
+                    break
 
-            proc2.wait()
+                if "out_time_us=" in line:
+                    try:
+                        us = int(line.split("out_time_us=")[1].split()[0])
+                        sec = us / 1_000_000
+                        prog = min(100, int(sec / total_duration * 100))
+
+                        with self.lock:
+                            job["progress"] = prog
+                    except:
+                        pass
+
+            proc.wait()
 
             if job["stop"]:
                 with self.lock:
                     job["status"] = "stopped"
                 return
 
-            if proc2.returncode != 0 or not final_output.exists():
-                raise Exception("Concat failed")
+            if proc.returncode == 0 and temp_out.exists():
+                # temp_out → final_output 으로 이동
+                shutil.move(str(temp_out), str(final_output))
 
-        except Exception as e:
-            with open(error_log, "a", encoding="utf-8") as f:
-                f.write(f"\nERROR: {str(e)}\n")
+                with self.lock:
+                    job["progress"] = 100
+                    job["status"] = "done"
+                    # 프론트는 /results/.. 로 GET 하도록 유지
+                    job["url"] = f"/results/{final_output.name}"
+            else:
+                with self.lock:
+                    job["status"] = "error"
 
+        except Exception:
             with self.lock:
                 job["status"] = "error"
-            return
 
-        # ---------------------------------------------------------
-        # 완료
-        # ---------------------------------------------------------
-        with self.lock:
-            job["progress"] = 100
-            job["status"] = "done"
-            job["url"] = f"/results/{final_output.name}"
+        finally:
+            if job_id in self.process:
+                del self.process[job_id]
 
-        # ---------------------------------------------------------
-        # 임시 파일 삭제
-        # ---------------------------------------------------------
-        try:
-            list_file.unlink(missing_ok=True)
-            for clip in temp_clips:
-                clip.unlink(missing_ok=True)
-        except:
-            pass
-
-        with open(error_log, "a", encoding="utf-8") as f:
-            f.write("\n==== EXPORT DONE ====\n")
-
-        if job_id in self.process:
-            del self.process[job_id]
+            # 임시 파일 정리
+            if temp_txt.exists():
+                temp_txt.unlink(missing_ok=True)
+            try:
+                local_video.unlink(missing_ok=True)
+            except Exception:
+                pass

@@ -1,2 +1,25 @@
 *.mp4
-*.mp4
+# Python cache
+__pycache__/
+*.pyc
+
+# Runtime JSON files (변경되거나 자동 생성되는 파일)
+progress.json
+analysis_store.json
+basket_coords.json
+
+# Runtime output folders
+static/frames/
+results/
+
+# Local video folders - R2로 이동하기 전 임시 저장용 (필요시 삭제)
+clips/
+videos/
+
+# Temporary folders
+temp/
+sync_videos/
+
+# System files
+.DS_Store
+Thumbs.db

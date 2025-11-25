@@ -1,6 +1,0 @@
-file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/240928_10s.mp4'
-inpoint 0.74
-outpoint 1.74
-file 'd:/Users/JWL/Desktop/YOLO/농구 동영상/240928_10s.mp4'
-inpoint 5.71
-outpoint 6.71

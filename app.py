@@ -11,6 +11,9 @@ from routes.yolo import bp as yolo_bp
 from routes.export import bp as export_bp
 from routes.result_page import bp as result_bp
 from routes.full import full_bp
+from routes.upload import bp as upload_bp
+from routes.videos import bp as videos_bp
+
 
 app = Flask(__name__)
 
@@ -22,6 +25,9 @@ app.register_blueprint(yolo_bp)
 app.register_blueprint(export_bp)
 app.register_blueprint(result_bp)
 app.register_blueprint(full_bp)
+app.register_blueprint(upload_bp)
+app.register_blueprint(videos_bp)
+
 
 
 
