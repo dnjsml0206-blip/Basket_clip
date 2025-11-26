@@ -11,7 +11,9 @@ from routes.upload import bp as upload_bp
 from routes.videos import bp as videos_bp
 from services.r2_service import r2_stream_video
 
-app = Flask(__name__)
+app = Flask(__name__, 
+            static_folder='static',
+            template_folder='templates')
 app.secret_key = "super-secret-key-123"
 
 app.register_blueprint(index_bp)
