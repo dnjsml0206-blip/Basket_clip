@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 load_dotenv()
 
-from flask import Flask, request, abort
+from flask import Flask, request, abort, jsonify
 from routes.index import bp as index_bp
 from routes.basket import bp as basket_bp
 from routes.yolo import bp as yolo_bp
@@ -9,7 +9,7 @@ from routes.export import bp as export_bp
 from routes.result_page import bp as result_bp
 from routes.upload import bp as upload_bp
 from routes.videos import bp as videos_bp
-from services.r2_service import r2_stream_video
+from services.r2_service import r2_stream_video, r2_list_videos
 
 app = Flask(__name__, 
             static_folder='static',
@@ -24,12 +24,30 @@ app.register_blueprint(result_bp)
 app.register_blueprint(upload_bp)
 app.register_blueprint(videos_bp)
 
+# 🔥 디버깅: R2 파일 목록 확인
+@app.route("/debug/r2_files")
+def debug_r2_files():
+    files = r2_list_videos()
+    return jsonify(files)
+
 # 🔥 R2 영상 스트리밍
 @app.route("/videos/<path:filename>")
 def stream_video(filename):
+    print(f"🔍 Streaming request: {filename}")
+    
+    # R2에 파일이 있는지 확인
+    all_files = r2_list_videos()
+    if filename not in all_files:
+        print(f"❌ File not found in R2: {filename}")
+        print(f"📁 Available files: {all_files}")
+        return abort(404)
+    
     resp = r2_stream_video(filename, request)
     if resp is None:
-        return abort(404)
+        print(f"❌ Stream failed: {filename}")
+        return abort(500)
+    
+    print(f"✅ Streaming success: {filename}")
     return resp
 
 if __name__ == "__main__":

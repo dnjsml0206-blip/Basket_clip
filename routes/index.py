@@ -1,6 +1,5 @@
 from flask import Blueprint, render_template, jsonify, request
 from services.store_service import load_store, add_item, delete_item
-from routes.videos import videos_list
 from services.r2_service import r2_list_videos
 from uuid import uuid4
 

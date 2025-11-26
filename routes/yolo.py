@@ -91,7 +91,14 @@ def _multi_worker():
 
 @bp.route("/progress_multi")
 def progress_multi():
-    return jsonify(progress.load())
+    data = progress.load()
+
+    # index.html은 current_video를 기대함 → 필드 맞춰줌
+    if "current_video" not in data:
+        # progress.json 안에 video 필드가 이미 있음
+        data["current_video"] = data.get("video")
+
+    return jsonify(data)
 
 
 @bp.route("/stop", methods=["POST"])
