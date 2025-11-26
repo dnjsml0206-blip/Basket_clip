@@ -2,6 +2,7 @@ from flask import Blueprint, request, render_template, jsonify
 from services.coord_service import BasketCoordService
 from services.r2_service import r2_download_temp_frame
 from pathlib import Path
+from config import BASE_DIR  # 추가
 import cv2
 import uuid
 import os
@@ -31,10 +32,14 @@ def basket_frame():
     if not ret:
         return "frame error", 500
 
+    # 🔥 절대 경로로 수정
+    frames_dir = BASE_DIR / "static" / "frames"
+    frames_dir.mkdir(parents=True, exist_ok=True)
+    
     filename = f"basket_{uuid.uuid4().hex}.jpg"
-    path = os.path.join("static/frames", filename)
-    os.makedirs("static/frames", exist_ok=True)
-    cv2.imwrite(path, frame)
+    path = frames_dir / filename
+    
+    cv2.imwrite(str(path), frame)
 
     return jsonify({"url": f"/static/frames/{filename}"})
 

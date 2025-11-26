@@ -30,7 +30,8 @@ def process_yolo():
     progress.set(0, "running", video)
 
     yolo = YoloHighlighter("mixup100epo.pt", progress, coords)
-    threading.Thread(target=yolo.run, args=(tmp_path,), daemon=True).start()
+    # 🔥 수정: video_name 인자 추가
+    threading.Thread(target=yolo.run, args=(tmp_path, video), daemon=True).start()
 
     return jsonify({"message": "YOLO started"})
 
@@ -77,7 +78,8 @@ def _multi_worker():
         progress.set(0, "running", video_name, videos=videos, index=idx, total=total)
 
         yolo = YoloHighlighter("mixup100epo.pt", progress, coords)
-        yolo.run(tmp_path)
+        # 🔥 수정: video_name 인자 추가
+        yolo.run(tmp_path, video_name)
 
         p = progress.load()
         if p["status"] == "stopped":
