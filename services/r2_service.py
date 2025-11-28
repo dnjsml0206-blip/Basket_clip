@@ -130,20 +130,20 @@ def r2_upload_file(local_path: Path, r2_filename: str):
 # 🔥 4) 메모리 파일 업로드 (Flask FileStorage 직접 업로드)
 # -----------------------------------------
 
-def r2_upload_bytes(file_storage, r2_filename: str):
-    """
-    Flask 파일 업로드 객체(file_storage) → R2에 직접 업로드
-    """
+def r2_upload_bytes(filename, data):
+    '''
+    data: raw bytes
+    filename: 저장될 파일명
+    '''
     try:
         s3.put_object(
             Bucket=R2_BUCKET,
-            Key=r2_filename,
-            Body=file_storage.read()
+            Key=filename,
+            Body=data,
+            ContentType="video/mp4"
         )
-        return True
     except Exception as e:
         print("❌ r2_upload_bytes ERROR:", e)
-        return False
 
 
 # -----------------------------------------
