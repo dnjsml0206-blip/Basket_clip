@@ -13,19 +13,6 @@
       padding:20px 0 40px;
     }
     h2 { margin-top:10px; }
-    
-    /* 🔥 디버깅 박스 */
-    .debug-box {
-      background:#222;
-      padding:10px;
-      margin:10px auto;
-      max-width:80%;
-      text-align:left;
-      font-size:12px;
-      border:1px solid #444;
-      border-radius:4px;
-    }
-    
     video {
       max-width:80%;
       width:80%;
@@ -37,17 +24,11 @@
       margin:0 auto;
     }
     
-    #videoError {
-      color:#f55;
-      margin:10px;
-      font-size:14px;
-    }
-    
     /* 타임라인 래퍼 (스크롤 영역) */
     #timelineWrapper {
       width: 80%;
       margin: 20px auto 5px auto;
-      overflow-x: auto;
+      overflow-x: auto;     /* 가로 스크롤 */
       overflow-y: hidden;
       white-space: nowrap;
       background: transparent;
@@ -170,26 +151,12 @@
   </style>
 </head>
 <body>
-  <!-- 🔥 디버깅 정보 표시 -->
-  <div class="debug-box">
-    <strong>🔍 디버깅 정보:</strong><br>
-    Video Name: <code>{{ video }}</code><br>
-    Video URL: <code>/videos/{{ video }}</code><br>
-    Clips Count: {{ clips|length }}<br>
-    <button onclick="testVideoUrl()" style="margin-top:5px;">Test Video URL</button>
-    <button onclick="testR2Files()">Check R2 Files</button>
-    <div id="testResult" style="margin-top:5px; color:#0f0;"></div>
-  </div>
-
   <h2>🎬 하이라이트 편집기 - {{ video }}</h2>
 
-  <video id="resultVideo" controls preload="metadata">
+  <video id="resultVideo" controls>
     <source src="/videos/{{ video }}" type="video/mp4">
     브라우저가 video 태그를 지원하지 않습니다.
   </video>
-
-  <!-- 🔥 에러 메시지 표시 -->
-  <div id="videoError"></div>
 
   <!-- 타임라인 -->
   <div id="timelineWrapper">
@@ -243,76 +210,6 @@
   </div>
 
 <script>
-/* 🔥 디버깅 함수들 */
-async function testVideoUrl() {
-  const videoName = "{{ video }}";
-  const testResult = document.getElementById("testResult");
-  testResult.textContent = "Testing...";
-  
-  try {
-    const response = await fetch(`/videos/${encodeURIComponent(videoName)}`, {
-      method: 'HEAD'
-    });
-    
-    if (response.ok) {
-      testResult.innerHTML = `✅ Video URL accessible (Status: ${response.status})`;
-      testResult.style.color = "#0f0";
-    } else {
-      testResult.innerHTML = `❌ Video URL error (Status: ${response.status})`;
-      testResult.style.color = "#f55";
-    }
-  } catch (err) {
-    testResult.innerHTML = `❌ Network error: ${err.message}`;
-    testResult.style.color = "#f55";
-  }
-}
-
-async function testR2Files() {
-  const testResult = document.getElementById("testResult");
-  testResult.textContent = "Checking R2...";
-  
-  try {
-    const response = await fetch('/debug/r2_files');
-    const files = await response.json();
-    testResult.innerHTML = `📁 R2 Files (${files.length}): ${files.join(', ')}`;
-    testResult.style.color = "#0ff";
-  } catch (err) {
-    testResult.innerHTML = `❌ R2 check failed: ${err.message}`;
-    testResult.style.color = "#f55";
-  }
-}
-
-/* 🔥 비디오 에러 감지 */
-const videoEl = document.getElementById("resultVideo");
-const videoError = document.getElementById("videoError");
-
-videoEl.addEventListener("error", (e) => {
-  console.error("❌ Video error:", videoEl.error);
-  videoError.innerHTML = `
-    ❌ 비디오 로딩 실패<br>
-    Error Code: ${videoEl.error?.code || 'unknown'}<br>
-    Message: ${videoEl.error?.message || 'unknown'}<br>
-    <button onclick="testVideoUrl()" style="margin-top:5px;">재테스트</button>
-  `;
-});
-
-videoEl.addEventListener("loadstart", () => {
-  console.log("✅ Video loading started");
-  videoError.textContent = "비디오 로딩 중...";
-  videoError.style.color = "#0ff";
-});
-
-videoEl.addEventListener("loadeddata", () => {
-  console.log("✅ Video loaded successfully");
-  videoError.textContent = "✅ 비디오 로드 완료";
-  videoError.style.color = "#0f0";
-  setTimeout(() => { videoError.textContent = ""; }, 3000);
-});
-
-videoEl.addEventListener("loadedmetadata", () => {
-  console.log("✅ Video metadata loaded, duration:", videoEl.duration);
-});
-
 /* ===========================
    기본 상태 변수들
    =========================== */
@@ -329,8 +226,6 @@ const videoName = "{{ video }}";
 let clipsData = {{ clips|tojson|safe }};
 if (!Array.isArray(clipsData)) clipsData = [];
 
-console.log("📊 Loaded clips:", clipsData);
-
 // 각 클립에 고유 id 부여
 let nextClipId = 1;
 let clips = clipsData.map(c => ({
@@ -342,6 +237,7 @@ let clips = clipsData.map(c => ({
   el: null
 }));
 
+const videoEl = document.getElementById("resultVideo");
 const timelineWrapper = document.getElementById("timelineWrapper");
 const timeline = document.getElementById("timeline");
 const ruler = document.getElementById("ruler");
@@ -373,10 +269,8 @@ let exportPolling = false;
    =========================== */
 videoEl.addEventListener("loadedmetadata", () => {
   const duration = videoEl.duration || 0;
-  console.log("📹 Video duration:", duration);
-  
   if (duration > 0) {
-    const PX_PER_SEC = 10;
+    const PX_PER_SEC = 10; // 1초당 10px
     const pixelWidth = Math.max(800, duration * PX_PER_SEC);
     timeline.style.width = pixelWidth + "px";
 
@@ -392,6 +286,7 @@ videoEl.addEventListener("loadedmetadata", () => {
 function renderTimeline() {
   const bar = document.getElementById("currentTimeBar");
 
+  // currentTimeBar는 남기고, 나머지 clip 요소만 제거
   Array.from(timeline.children).forEach(ch => {
     if (ch !== bar) timeline.removeChild(ch);
   });
@@ -460,6 +355,7 @@ function addHandles(div, clipData) {
   div.appendChild(leftH);
   div.appendChild(rightH);
 
+  // 클릭 → 선택 / 다중 선택
   div.addEventListener("click", e => {
     if (e.target.classList.contains("handle")) return;
 
@@ -470,6 +366,7 @@ function addHandles(div, clipData) {
     updateSelectionStyles();
   });
 
+  // 🔥 더블클릭 → 해당 구간부터 하이라이트 재생 (id 기준으로 정확히 찾음)
   div.addEventListener("dblclick", e => {
     refreshClipTimes();
 
@@ -484,6 +381,7 @@ function addHandles(div, clipData) {
     startHighlightLoop();
   });
 
+  // 드래그 이동
   div.addEventListener("mousedown", e => {
     if (e.target.classList.contains("handle")) return;
     const rect = timeline.getBoundingClientRect();
@@ -491,6 +389,7 @@ function addHandles(div, clipData) {
     draggingClip = div;
   });
 
+  // 리사이즈
   leftH.addEventListener("mousedown", e => {
     e.stopPropagation();
     resizingClip = div;
@@ -514,6 +413,7 @@ document.addEventListener("mousemove", e => {
   const tlWidth = timeline.offsetWidth;
   const pxPerSec = tlWidth / dur;
 
+  // 클립 이동
   if (draggingClip) {
     let left = e.clientX - rect.left - dragOffsetX;
     if (left < 0) left = 0;
@@ -531,6 +431,7 @@ document.addEventListener("mousemove", e => {
     return;
   }
 
+  // 리사이즈
   if (resizingClip) {
     const left = resizingClip.offsetLeft;
     const width = resizingClip.offsetWidth;
@@ -560,6 +461,7 @@ document.addEventListener("mousemove", e => {
     return;
   }
 
+  // 선택 박스
   if (isSelecting && selectionBox) {
     const minX = Math.min(selectionStartX, e.clientX);
     const maxX = Math.max(selectionStartX, e.clientX);
@@ -594,6 +496,7 @@ document.addEventListener("mouseup", e => {
   }
 });
 
+// 타임라인 빈영역 클릭 → 박스 선택 시작
 timeline.addEventListener("mousedown", e => {
   if (e.target !== timeline) return;
   isSelecting = true;
@@ -670,7 +573,7 @@ function addClip() {
     return;
   }
 
-  const len = 7;
+  const len = 7; // 현재 시점 기준 7초 앞쪽
   let start = now - len;
   let end = now;
 
@@ -705,6 +608,7 @@ function setSelectedColor(color) {
   });
 }
 
+/* 라벨 지정 */
 function applyLabelToSelected(label) {
   selectedClips.forEach(c => {
     c.label = label;
@@ -745,6 +649,9 @@ function refreshMarkerOptions() {
   });
 }
 
+/* ===========================
+   위치 최신화 (px → 초)
+   =========================== */
 function refreshClipTimes() {
   const dur = videoEl.duration || 0;
   const tlWidth = timeline.offsetWidth;
@@ -759,6 +666,9 @@ function refreshClipTimes() {
   });
 }
 
+/* ===========================
+   저장
+   =========================== */
 function saveAnalysis() {
   refreshClipTimes();
 
@@ -831,7 +741,7 @@ function startExport(cleanClips) {
       return;
     }
     currentJobId = data.job_id;
-    window._export_result_file = data.file;
+    window._export_result_file = data.file;  // 예: /results/highlight_xxx.mp4
     exportPolling = true;
     pollExport();
   })
@@ -880,6 +790,9 @@ function stopExport() {
   });
 }
 
+/* -----------------------
+   Export 헬퍼 버튼
+   ----------------------- */
 function downloadHighlight() {
   if (!clips.length) {
     alert("구간이 없습니다!");
@@ -900,64 +813,75 @@ function downloadColorHighlight(color) {
 function downloadPlayerHighlight() {
   const markerSelect = document.getElementById("markerSelect");
   const marker = markerSelect.value;
-if (!marker) {
-alert("마킹 번호를 선택하세요.");
-return;
+  if (!marker) {
+    alert("마킹 번호를 선택하세요.");
+    return;
+  }
+  const target = clips.filter(c => c.label === marker);
+  if (!target.length) {
+    alert("해당 번호의 구간이 없습니다.");
+    return;
+  }
+  startExport(collectCleanClips(target));
 }
-const target = clips.filter(c => c.label === marker);
-if (!target.length) {
-alert("해당 번호의 구간이 없습니다.");
-return;
-}
-startExport(collectCleanClips(target));
-}
+
+/* ===========================
+   하이라이트 자동 재생
+   =========================== */
 function startHighlightLoop() {
-cancelAnimationFrame(rafId);
-function loop() {
-if (!playingHighlights) return;
-const cur = highlightQueue[currentIndex];
-if (videoEl.currentTime >= cur.end - 0.05) {
-currentIndex++;
-if (currentIndex >= highlightQueue.length) {
-playingHighlights = false;
-videoEl.pause();
-return;
+  cancelAnimationFrame(rafId);
+  function loop() {
+    if (!playingHighlights) return;
+    const cur = highlightQueue[currentIndex];
+    if (videoEl.currentTime >= cur.end - 0.05) {
+      currentIndex++;
+      if (currentIndex >= highlightQueue.length) {
+        playingHighlights = false;
+        videoEl.pause();
+        return;
+      }
+      const next = highlightQueue[currentIndex];
+      videoEl.currentTime = next.start;
+      videoEl.play();
+    }
+    rafId = requestAnimationFrame(loop);
+  }
+  rafId = requestAnimationFrame(loop);
 }
-const next = highlightQueue[currentIndex];
-videoEl.currentTime = next.start;
-videoEl.play();
-}
-rafId = requestAnimationFrame(loop);
-}
-rafId = requestAnimationFrame(loop);
-}
+
 function playHighlights() {
-refreshClipTimes();
-if (selectedClips.size > 0) {
-highlightQueue = Array.from(selectedClips).sort((a,b)=>a.start - b.start);
-} else {
-highlightQueue = clips.slice().sort((a,b)=>a.start - b.start);
+  refreshClipTimes();
+  if (selectedClips.size > 0) {
+    highlightQueue = Array.from(selectedClips).sort((a,b)=>a.start - b.start);
+  } else {
+    highlightQueue = clips.slice().sort((a,b)=>a.start - b.start);
+  }
+  if (!highlightQueue.length) {
+    alert("하이라이트 구간이 없습니다.");
+    return;
+  }
+  currentIndex = 0;
+  playingHighlights = true;
+  videoEl.currentTime = highlightQueue[0].start;
+  videoEl.play();
+  startHighlightLoop();
 }
-if (!highlightQueue.length) {
-alert("하이라이트 구간이 없습니다.");
-return;
-}
-currentIndex = 0;
-playingHighlights = true;
-videoEl.currentTime = highlightQueue[0].start;
-videoEl.play();
-startHighlightLoop();
-}
+
+/* ===========================
+   키보드 이벤트 (Delete / 숫자)
+   =========================== */
 document.addEventListener("keydown", e => {
-const tag = (e.target.tagName || "").toUpperCase();
-if (tag === "INPUT" || tag === "SELECT" || e.target.isContentEditable) return;
-if (e.key === "Delete" || e.key === "Backspace") {
-deleteClip();
-} else if (e.key >= "0" && e.key <= "9") {
-handleDigitKey(e.key);
-}
+  const tag = (e.target.tagName || "").toUpperCase();
+  if (tag === "INPUT" || tag === "SELECT" || e.target.isContentEditable) return;
+
+  if (e.key === "Delete" || e.key === "Backspace") {
+    deleteClip();
+  } else if (e.key >= "0" && e.key <= "9") {
+    handleDigitKey(e.key);
+  }
 });
+
 </script>
+
 </body>
 </html>
-````
