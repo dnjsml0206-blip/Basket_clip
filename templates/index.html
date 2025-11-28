@@ -19,21 +19,49 @@
     <input type="file" id="uploadFile" accept="video/*" multiple>
     <button onclick="uploadVideos()">영상 업로드</button>
 
-    <div id="uploadStatus" style="margin-top:10px; color:#0f0;"></div>
+    <div id="uploadList" style="margin-top:20px; text-align:left; width:60%; margin:auto;"></div>
+
     <hr style="width:60%; margin:20px auto;">
 
 
-    <!-- ★ 이미 multiple 적용 → 유지 -->
-    <select id="video" name="video" multiple size="6">
-        {% for v in videos %}
-        <option value="{{v}}">{{v}}</option>
-        {% endfor %}
-    </select><br>
+    <div style="width:60%; margin:10px auto;">
+        <progress id="uploadProgress" value="0" max="100" style="width:100%; height:25px; display:none;"></progress>
+        <div id="uploadProgressText" style="margin-top:5px; font-size:16px;"></div>
+    </div>
+
+
+    <!-- 📌 영상 선택 + 업로드 리스트 좌/우 레이아웃 -->
+    <div style="display:flex; justify-content:center; gap:40px; margin-top:30px;">
+
+        <!-- 왼쪽 : 분석할 영상 선택 -->
+        <div>
+            <h3 style="margin-bottom:8px;">🎞 분석할 영상 선택</h3>
+            <select id="video" name="video" multiple size="10" 
+                    style="padding:6px; width:220px;">
+                {% for v in videos %}
+                <option value="{{v}}">{{v}}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- 오른쪽 : 업로드된 영상 목록 + 삭제 버튼 -->
+        <div>
+            <h3 style="margin-bottom:8px;">📁 업로드된 영상 목록</h3>
+            <div id="videoDeleteList"
+                style="text-align:left; width:260px; min-height:200px;">
+                <!-- JS에서 영상 리스트 자동 렌더링됨 -->
+            </div>
+        </div>
+
+    </div>
+
+
 
     <button onclick="selectBasket()">골대 좌표 선택</button>
     <button onclick="start()">분석 시작</button>
     <button id="stopBtn" onclick="stopProcess()" disabled>중지</button>
     <button onclick="goCrossEdit()">좌/우 골대 교차 편집</button>
+    <button onclick="endAnalysis()">🔚 분석 종료</button>
 
     <div id="status">대기 중...</div>
     <progress id="bar" value="0" max="100"></progress>
@@ -237,28 +265,69 @@ async function uploadVideos() {
         return;
     }
 
-    const formData = new FormData();
-    for (const f of files) formData.append("files", f);
+    const uploadBox = document.getElementById("uploadList");
+    uploadBox.innerHTML = ""; // 기존 UI 초기화
 
-    document.getElementById("uploadStatus").innerText = "업로드 중...";
+    let completedCount = 0;
 
-    const res = await fetch("/upload_video", {
-        method: "POST",
-        body: formData
-    });
+    for (const file of files) {
+        // 각 파일별 UI 만들기
+        const row = document.createElement("div");
+        row.style.margin = "8px 0";
+        row.innerHTML = `
+            <div><b>${file.name}</b></div>
+            <progress value="0" max="100" style="width:100%; height:20px;"></progress>
+            <div class="percent" style="font-size:14px; color:#0f0;"></div>
+        `;
+        uploadBox.appendChild(row);
 
-    const data = await res.json();
+        const progressEl = row.querySelector("progress");
+        const percentEl = row.querySelector(".percent");
 
-    if (data.error) {
-        document.getElementById("uploadStatus").innerText = "❌ 업로드 실패: " + data.error;
-        return;
+        // 파일별 업로드 (XHR)
+        const formData = new FormData();
+        formData.append("files", file);
+
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", "/upload_video", true);
+
+        // 개별 파일 업로드 progress
+        xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+                const percent = Math.round((e.loaded / e.total) * 100);
+                progressEl.value = percent;
+                percentEl.innerText = `${percent}%`;
+            }
+        };
+
+        xhr.onload = () => {
+            if (xhr.status === 200) {
+                percentEl.innerText = "✔ 업로드 완료";
+                percentEl.style.color = "#0f0";
+            } else {
+                percentEl.innerText = "❌ 실패";
+                percentEl.style.color = "red";
+            }
+
+            completedCount++;
+            if (completedCount === files.length) {
+                setTimeout(() => {
+                    refreshVideoList();
+                    loadDeleteList();
+                }, 500);
+            }
+        };
+
+        xhr.onerror = () => {
+            percentEl.innerText = "❌ 오류 발생";
+            percentEl.style.color = "red";
+        };
+
+        xhr.send(formData);
     }
-
-    document.getElementById("uploadStatus").innerText = "업로드 완료! 목록 갱신 중...";
-
-    // 🔥 업로드 성공 → 영상 목록 자동 새로고침
-    refreshVideoList();
 }
+
+
 
 /* =============================
    🔥 영상 목록 갱신 기능
@@ -279,6 +348,58 @@ async function refreshVideoList() {
 
     document.getElementById("uploadStatus").innerText = "업로드 완료!";
 }
+
+function endAnalysis() {
+    if (!confirm("정말 분석을 종료하고 모든 작업을 초기화할까요?")) return;
+
+    fetch("/end_analysis", {
+        method: "POST"
+    }).then(() => {
+        window.location.href = "/";   // 홈으로 이동
+    });
+}
+
+async function loadDeleteList() {
+    const res = await fetch("/videos_list");
+    const videos = await res.json();
+
+    const box = document.getElementById("videoDeleteList");
+    box.innerHTML = "";
+
+    videos.forEach(v => {
+        const div = document.createElement("div");
+        div.style.margin = "6px";
+
+        div.innerHTML = `
+            🎬 ${v}
+            <button onclick="deleteVideo('${v}')"
+                style="margin-left:10px; padding:4px 8px; background:#a00; color:white; border:none; border-radius:4px;">
+                삭제
+            </button>
+        `;
+
+        box.appendChild(div);
+    });
+}
+
+async function deleteVideo(filename) {
+    if (!confirm(`${filename} 을(를) 정말 삭제하시겠습니까?`)) return;
+
+    await fetch("/delete_video", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ filename })
+    });
+
+    alert("삭제되었습니다.");
+
+    // 영상 선택 목록 & 삭제 목록 둘 다 다시 로드
+    refreshVideoList();
+    loadDeleteList();
+}
+
+// 페이지 로드 시 자동 로드
+loadDeleteList();
 
 
 

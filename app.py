@@ -10,6 +10,9 @@ from routes.result_page import bp as result_bp
 from routes.upload import bp as upload_bp
 from routes.videos import bp as videos_bp
 from services.r2_service import r2_stream_video, r2_list_videos
+from routes.analysis_end import bp as analysis_end_bp
+from routes.test_r2_permission import bp as test_r2_permission_bp
+from routes.delete_video import bp as delete_video_bp
 
 app = Flask(__name__, 
             static_folder='static',
@@ -23,6 +26,10 @@ app.register_blueprint(export_bp)
 app.register_blueprint(result_bp)
 app.register_blueprint(upload_bp)
 app.register_blueprint(videos_bp)
+app.register_blueprint(analysis_end_bp)
+app.register_blueprint(test_r2_permission_bp)
+app.register_blueprint(delete_video_bp)
+
 
 # 🔥 디버깅: R2 파일 목록 확인
 @app.route("/debug/r2_files")

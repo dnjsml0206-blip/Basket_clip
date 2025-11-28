@@ -22,3 +22,13 @@ ANALYSIS_STORE_PATH = BASE_DIR / "utils" / "analysis_store.json"
 ANALYSIS_STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
 if not ANALYSIS_STORE_PATH.exists():
     ANALYSIS_STORE_PATH.write_text("[]", encoding="utf-8")
+
+
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+R2_ACCESS_KEY = os.getenv("R2_ACCESS_KEY")
+R2_SECRET_KEY = os.getenv("R2_SECRET_KEY")
+R2_BUCKET = os.getenv("R2_BUCKET")

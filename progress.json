@@ -1,11 +1,11 @@
 {
   "progress": 100,
-  "status": "stopped",
-  "video": "240928_10s.mp4",
-  "clips": [],
+  "status": "done_all",
   "videos": [
     "240928_10s.mp4"
   ],
   "index": 1,
-  "total": 1
+  "total": 1,
+  "video": "240928_10s.mp4",
+  "clips": []
 }

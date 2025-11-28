@@ -103,12 +103,26 @@ def progress_multi():
 
 @bp.route("/stop", methods=["POST"])
 def stop():
-    p = progress.load()
-    progress.set(
-        p["progress"], "stopped",
-        video=p["video"],
-        videos=p.get("videos", []),
-        index=p.get("index", 0),
-        total=p.get("total", 1)
+    job_id = request.json.get("job_id")
+
+    # progress.json 읽기
+    try:
+        with open("progress.json", "r") as f:
+            p = json.load(f)
+    except:
+        p = {}
+
+    # 기본값 안전하게 설정
+    progress = p.get("progress", 0)
+    status = p.get("status", "stopped")
+    video = p.get("video", None)
+
+    # 업데이트 처리
+    update_progress(
+        job_id,
+        progress,
+        "stopped",
+        video=video
     )
-    return jsonify({"message": "stopped"})
+
+    return jsonify({"status": "stopped"})
